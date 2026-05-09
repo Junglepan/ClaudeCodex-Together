@@ -4,6 +4,8 @@ import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import type { ApiFileDetail } from '@/core/api'
+import { ExistsBadge } from '@/components/ui/Badges'
+import { ErrorState } from '@/components/ui/Skeleton'
 
 interface Props {
   agentId: string
@@ -15,17 +17,14 @@ export function FileDetail({ agentId, fileKey }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
 
-  // Edit state
-  const [editing, setEditing]       = useState(false)
+  const [editing, setEditing]         = useState(false)
   const [editContent, setEditContent] = useState('')
-  const [saving, setSaving]         = useState(false)
-  const [saveMsg, setSaveMsg]       = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
 
-  // Delete state
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting]           = useState(false)
 
-  const { setAgentFiles, projectPath } = useAppStore()
+  const { setAgentFiles, projectPath, pushToast } = useAppStore()
   const agent    = agentRegistry.get(agentId)
   const fileSpec = agent?.configFiles.find((f) => f.key === fileKey)
 
@@ -33,7 +32,6 @@ export function FileDetail({ agentId, fileKey }: Props) {
     setLoading(true)
     setError(null)
     setEditing(false)
-    setSaveMsg(null)
     api.files.meta(agentId, fileKey)
       .then(setDetail)
       .catch((e) => setError(String(e)))
@@ -47,15 +45,14 @@ export function FileDetail({ agentId, fileKey }: Props) {
     setSaving(true)
     try {
       await api.files.write(detail.path, editContent)
-      setSaveMsg('已保存')
+      pushToast({ kind: 'success', message: `已保存：${fileSpec?.label ?? '文件'}` })
       setEditing(false)
       load()
-      // Refresh file list so status badge updates
       api.agents.files(agentId, projectPath)
         .then((f) => setAgentFiles(agentId, f))
         .catch(console.error)
     } catch (e) {
-      setSaveMsg(`保存失败：${e}`)
+      pushToast({ kind: 'error', message: `保存失败：${e instanceof Error ? e.message : String(e)}` })
     } finally {
       setSaving(false)
     }
@@ -66,20 +63,29 @@ export function FileDetail({ agentId, fileKey }: Props) {
     setDeleting(true)
     try {
       await api.files.delete(detail.path)
+      pushToast({ kind: 'success', message: `已删除：${fileSpec?.label ?? '文件'}` })
       setConfirmDelete(false)
       load()
       api.agents.files(agentId, projectPath)
         .then((f) => setAgentFiles(agentId, f))
         .catch(console.error)
     } catch (e) {
-      setError(`删除失败：${e}`)
+      pushToast({ kind: 'error', message: `删除失败：${e instanceof Error ? e.message : String(e)}` })
     } finally {
       setDeleting(false)
     }
   }
 
-  if (loading) return <div className="p-6 text-text-tertiary text-sm animate-pulse">加载中…</div>
-  if (error)   return <div className="p-6 text-red-500 text-sm">加载失败：{error}</div>
+  if (loading) {
+    return (
+      <div className="p-6 space-y-4">
+        <div className="h-6 w-1/3 bg-border-subtle/70 animate-pulse rounded" />
+        <div className="h-4 w-2/3 bg-border-subtle/70 animate-pulse rounded" />
+        <div className="h-32 bg-border-subtle/70 animate-pulse rounded" />
+      </div>
+    )
+  }
+  if (error)   return <div className="p-6"><ErrorState message={error} onRetry={load} /></div>
   if (!detail || !fileSpec) return <div className="p-6 text-text-tertiary text-sm">未找到文件定义</div>
 
   const counterpartAgent = fileSpec.counterpartAgent ? agentRegistry.get(fileSpec.counterpartAgent) : null
@@ -87,8 +93,7 @@ export function FileDetail({ agentId, fileKey }: Props) {
   const canEdit = fileSpec.kind === 'file'
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
+    <div className="flex flex-col h-full overflow-hidden animate-fade-in">
       <div className="px-5 py-3.5 border-b border-border-default flex items-center gap-3 flex-shrink-0 bg-white">
         <span className="font-semibold text-text-primary text-sm">{fileSpec.label}</span>
         <ExistsBadge exists={detail.exists} />
@@ -125,35 +130,26 @@ export function FileDetail({ agentId, fileKey }: Props) {
                 className="flex items-center gap-1.5 text-2xs px-2.5 py-1 rounded-lg bg-accent-blue text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
               >
                 <Check size={11} />
-                {saving ? '保存中…' : '保存'}
+                {saving ? '保存中…' : '保存 (⌘S)'}
               </button>
               <button
-                onClick={() => { setEditing(false); setSaveMsg(null) }}
+                onClick={() => setEditing(false)}
                 className="flex items-center gap-1.5 text-2xs px-2.5 py-1 rounded-lg border border-border-default hover:bg-surface-hover text-text-secondary transition-colors"
               >
                 <X size={11} />
-                取消
+                取消 (Esc)
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Save/delete feedback banners */}
-      {saveMsg && (
-        <div className={`px-5 py-2 text-xs flex items-center gap-2 ${saveMsg.startsWith('已') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {saveMsg.startsWith('已') ? <Check size={12} /> : <AlertTriangle size={12} />}
-          {saveMsg}
-        </div>
-      )}
-
-      {/* Delete confirmation */}
       {confirmDelete && (
-        <div className="mx-5 mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 flex-shrink-0">
+        <div className="mx-5 mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 flex-shrink-0 animate-fade-in">
           <AlertTriangle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-medium text-red-800">确认删除此文件？</p>
-            <p className="text-xs text-red-600 mt-0.5 font-mono">{detail.path}</p>
+            <p className="text-xs text-red-600 mt-0.5 font-mono break-all">{detail.path}</p>
             <p className="text-xs text-red-600 mt-1">此操作不可撤销。</p>
           </div>
           <div className="flex gap-2">
@@ -175,40 +171,35 @@ export function FileDetail({ agentId, fileKey }: Props) {
       )}
 
       <div className="flex-1 overflow-auto p-5 space-y-5">
-
-        {/* File path */}
         <div className="flex items-center gap-2 bg-surface-base border border-border-subtle rounded-lg px-3 py-2">
           <span className="text-2xs text-text-tertiary flex-shrink-0">路径</span>
           <span className="text-xs font-mono text-text-primary flex-1 truncate">{detail.path}</span>
           <CopyBtn text={detail.path} />
         </div>
 
-        {/* Purpose */}
         <InfoSection icon="🛡" title="作用说明">
           <p className="text-sm text-text-secondary leading-relaxed">{fileSpec.purpose}</p>
         </InfoSection>
 
-        {/* How it works */}
         <InfoSection icon="⚙" title="生效原理">
           <pre className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap font-sans bg-surface-base border border-border-subtle rounded-lg p-3">
             {fileSpec.details}
           </pre>
         </InfoSection>
 
-        {/* Editor / Content viewer */}
         {editing ? (
           <InfoSection icon="✏️" title="编辑内容">
-            <textarea
+            <EditorTextarea
               value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="w-full h-64 p-3 text-xs font-mono text-text-primary bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors resize-y leading-relaxed"
-              spellCheck={false}
+              onChange={setEditContent}
+              onSave={handleSave}
+              onCancel={() => setEditing(false)}
               placeholder={`在此输入 ${fileSpec.label} 的内容…`}
             />
           </InfoSection>
         ) : detail.exists && detail.content != null ? (
           <InfoSection icon="📄" title="当前内容">
-            <ContentViewer content={detail.content} path={detail.path} />
+            <ContentViewer content={detail.content} />
           </InfoSection>
         ) : !detail.exists ? (
           <div className="flex items-start gap-3 p-3 bg-surface-base border border-border-subtle rounded-lg text-xs text-text-tertiary">
@@ -217,7 +208,6 @@ export function FileDetail({ agentId, fileKey }: Props) {
           </div>
         ) : null}
 
-        {/* Counterpart / sync */}
         {counterpartAgent && counterpartSpec ? (
           <CounterpartSection
             sourceAgent={agent!.shortName}
@@ -233,19 +223,8 @@ export function FileDetail({ agentId, fileKey }: Props) {
             <span>对应 {fileSpec.counterpartAgent} 的等价文件：{fileSpec.syncStrategy ?? '无迁移策略'}</span>
           </div>
         ) : null}
-
       </div>
     </div>
-  )
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function ExistsBadge({ exists }: { exists: boolean }) {
-  return exists ? (
-    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">活跃</span>
-  ) : (
-    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">不存在</span>
   )
 }
 
@@ -261,7 +240,35 @@ function InfoSection({ icon, title, children }: { icon: string; title: string; c
   )
 }
 
-function ContentViewer({ content, path }: { content: string; path: string }) {
+function EditorTextarea({
+  value,
+  onChange,
+  onSave,
+  onCancel,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSave: () => void
+  onCancel: () => void
+  placeholder?: string
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); onSave() }
+        if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+      }}
+      className="w-full h-64 p-3 text-xs font-mono text-text-primary bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors resize-y leading-relaxed"
+      spellCheck={false}
+      placeholder={placeholder}
+    />
+  )
+}
+
+function ContentViewer({ content }: { content: string }) {
   const MAX = 2000
   const truncated = content.length > MAX
   const display   = truncated ? content.slice(0, MAX) : content
@@ -297,7 +304,6 @@ function CounterpartSection({
   syncStrategy?: string
 }) {
   if (!targetAgent) return null
-
   const notInstalled = !targetExists && !targetPath
 
   return (
@@ -325,9 +331,7 @@ function CounterpartSection({
           <div className="px-4 pb-3 border-t border-border-subtle pt-3">
             <div className="flex items-start gap-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
               <Info size={13} className="flex-shrink-0 mt-0.5" />
-              <span>
-                {targetAgent.shortName} 尚未安装或未初始化，目标路径不存在。安装后再运行同步即可自动创建。
-              </span>
+              <span>{targetAgent.shortName} 尚未安装或未初始化，目标路径不存在。安装后再运行同步即可自动创建。</span>
             </div>
           </div>
         )}
@@ -349,10 +353,7 @@ function CounterpartSection({
 }
 
 function PathBox({
-  label,
-  path,
-  exists,
-  notInstalled,
+  label, path, exists, notInstalled,
 }: {
   label: string
   path: string
@@ -382,7 +383,7 @@ function CopyBtn({ text }: { text: string }) {
     setTimeout(() => setCopied(false), 1500)
   }
   return (
-    <button onClick={handle} className="text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0">
+    <button onClick={handle} className="text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0" title="复制">
       {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
     </button>
   )

@@ -7,7 +7,7 @@ import type { ApiSyncResult, ApiSyncItem } from '@/core/api'
 type Scope = 'all' | 'global' | 'project'
 
 export function SyncCenter() {
-  const { projectPath } = useAppStore()
+  const { projectPath, pushToast } = useAppStore()
   const [scope, setScope] = useState<Scope>('all')
   const [result, setResult] = useState<ApiSyncResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,8 +22,16 @@ export function SyncCenter() {
         : await api.sync.execute(scope, projectPath)
       setResult(res)
       setMode(dryRun ? 'dry-run' : 'done')
+      const writtenCount = res.written.length
+      pushToast({
+        kind: 'success',
+        message: dryRun
+          ? `预演完成：${writtenCount} 项可写入`
+          : `同步完成：写入 ${writtenCount} 项`,
+      })
     } catch (e) {
-      console.error(e)
+      const msg = e instanceof Error ? e.message : String(e)
+      pushToast({ kind: 'error', message: `同步失败：${msg}` })
     } finally {
       setLoading(false)
     }

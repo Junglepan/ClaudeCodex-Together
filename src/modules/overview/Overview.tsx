@@ -1,25 +1,17 @@
-import { useEffect } from 'react'
-import { useAppStore } from '@/store'
+import { useAgents } from '@/hooks/useAgents'
 import { agentRegistry } from '@/core/agent-registry'
-import { api } from '@/core/api'
+import { useAppStore } from '@/store'
 import type { ApiConfigFile } from '@/core/api'
+import { StatusBadge } from '@/components/ui/Badges'
+import { CardSkeleton } from '@/components/ui/Skeleton'
 
 export function Overview() {
-  const { agentSummaries, setAgentSummaries, agentFiles, setAgentFiles, projectPath } = useAppStore()
-
-  useEffect(() => {
-    api.agents.list(projectPath).then(setAgentSummaries).catch(console.error)
-    agentRegistry.getAll().forEach((agent) => {
-      api.agents.files(agent.id, projectPath)
-        .then((files) => setAgentFiles(agent.id, files))
-        .catch(console.error)
-    })
-  }, [projectPath, setAgentSummaries, setAgentFiles])
-
+  const { summaries, filesByAgent } = useAgents()
+  const { loading } = useAppStore()
   const agents = agentRegistry.getAll()
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="flex-1 overflow-auto p-6 animate-fade-in">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-text-primary">概览</h1>
         <p className="mt-1 text-sm text-text-secondary">
@@ -27,43 +19,46 @@ export function Overview() {
         </p>
       </div>
 
-      {/* Agent status cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
-        {agents.map((agent) => {
-          const summary = agentSummaries.find((s) => s.id === agent.id)
-          const files = agentFiles[agent.id] ?? []
-          const activeFiles = files.filter((f) => f.exists)
-          return (
-            <div key={agent.id} className="bg-surface-card border border-border-default rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: `${agent.color}20` }}
-                  >
-                    <agent.Icon size={16} color={agent.color} />
+        {loading && summaries.length === 0
+          ? agents.map((a) => <CardSkeleton key={a.id} />)
+          : agents.map((agent) => {
+              const summary = summaries.find((s) => s.id === agent.id)
+              const files = filesByAgent[agent.id] ?? []
+              const activeFiles = files.filter((f) => f.exists)
+              return (
+                <div
+                  key={agent.id}
+                  className="bg-surface-card border border-border-default rounded-xl p-4 hover:border-border-default/80 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: `${agent.color}20` }}
+                      >
+                        <agent.Icon size={16} color={agent.color} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-text-primary text-sm">{agent.shortName}</div>
+                        <div className="text-2xs text-text-tertiary font-mono truncate">{agent.globalDir}</div>
+                      </div>
+                    </div>
+                    {summary && <StatusBadge status={summary.status} />}
                   </div>
-                  <div>
-                    <div className="font-medium text-text-primary text-sm">{agent.shortName}</div>
-                    <div className="text-2xs text-text-tertiary font-mono">{agent.globalDir}</div>
-                  </div>
+                  {summary ? (
+                    <div className="flex gap-4 text-xs text-text-secondary">
+                      <span><span className="font-medium text-text-primary">{activeFiles.length}</span> 个文件已存在</span>
+                      <span><span className="font-medium text-text-tertiary">{files.length - activeFiles.length}</span> 个未创建</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-tertiary">正在检测…</p>
+                  )}
                 </div>
-                {summary && <StatusBadge status={summary.status} />}
-              </div>
-              {summary ? (
-                <div className="flex gap-4 text-xs text-text-secondary">
-                  <span><span className="font-medium text-text-primary">{activeFiles.length}</span> 个文件已存在</span>
-                  <span><span className="font-medium text-text-tertiary">{files.length - activeFiles.length}</span> 个未创建</span>
-                </div>
-              ) : (
-                <p className="text-xs text-text-tertiary">正在检测…</p>
-              )}
-            </div>
-          )
-        })}
+              )
+            })}
       </div>
 
-      {/* Config comparison table */}
       <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
           <h2 className="text-sm font-medium text-text-primary">配置对照</h2>
@@ -75,33 +70,15 @@ export function Overview() {
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    active:        { label: '活跃中',  className: 'bg-green-100 text-green-700' },
-    not_installed: { label: '未安装',  className: 'bg-gray-100 text-gray-500' },
-    partial:       { label: '部分配置', className: 'bg-yellow-100 text-yellow-700' },
-  }
-  const cfg = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-500' }
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.className}`}>
-      {cfg.label}
-    </span>
-  )
-}
-
-// Rows define which file keys to compare across agents.
-// Uses actual keys from agent definitions.
 const COMPARISON_ROWS: Array<{
   group: string
   label: string
   claudeKey: string
   codexKey: string
 }> = [
-  // Working style layer (sync targets)
   { group: '工作习惯层',  label: '项目指令',      claudeKey: 'project_instructions', codexKey: 'project_instructions' },
   { group: '工作习惯层',  label: '全局技能',      claudeKey: 'global_skills',        codexKey: 'global_skills' },
   { group: '工作习惯层',  label: '自定义 Agent',  claudeKey: 'project_agents',       codexKey: 'project_agents' },
-  // Infrastructure layer (display only)
   { group: '基础设施层',  label: '全局设置',      claudeKey: 'global_settings',      codexKey: 'global_config' },
   { group: '基础设施层',  label: '项目设置',      claudeKey: 'project_settings',     codexKey: 'project_config' },
 ]
@@ -114,7 +91,6 @@ function ComparisonTable() {
   const claudeFiles = agentFiles['claude'] ?? []
   const codexFiles  = agentFiles['codex']  ?? []
 
-  // Group rows
   const groups = [...new Set(COMPARISON_ROWS.map((r) => r.group))]
 
   return (
@@ -142,18 +118,15 @@ function ComparisonTable() {
           return rows.map((row, i) => (
             <tr
               key={row.label}
-              className="border-b border-border-subtle last:border-0 hover:bg-surface-hover"
+              className="border-b border-border-subtle last:border-0 hover:bg-surface-hover transition-colors"
             >
-              {/* Group label — only on first row of group */}
               {i === 0 ? (
                 <td
                   className="px-4 py-2.5 text-2xs font-medium text-text-tertiary align-top"
                   rowSpan={rows.length}
                 >
                   <span className={`px-1.5 py-0.5 rounded text-2xs ${
-                    isSyncLayer
-                      ? 'bg-accent-blue/10 text-accent-blue'
-                      : 'bg-gray-100 text-gray-500'
+                    isSyncLayer ? 'bg-accent-blue/10 text-accent-blue' : 'bg-gray-100 text-gray-500'
                   }`}>
                     {group}
                   </span>
@@ -190,7 +163,7 @@ function FileStatusCell({
   if (!file) return <span className="text-text-tertiary text-xs">—</span>
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <span
         className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
           file.exists ? 'bg-status-active' : 'bg-border-default'

@@ -1,24 +1,17 @@
-import { useEffect, useState } from 'react'
-import { agentRegistry } from '@/core/agent-registry'
-import { useAppStore } from '@/store'
-import { api } from '@/core/api'
-import type { ApiConfigFile } from '@/core/api'
 import { CheckCircle, Circle } from 'lucide-react'
+import { agentRegistry } from '@/core/agent-registry'
+import { useAgents } from '@/hooks/useAgents'
+import { useAppStore } from '@/store'
+import type { ApiConfigFile } from '@/core/api'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 
 export function ActiveConfig() {
-  const { projectPath } = useAppStore()
-  const [filesByAgent, setFilesByAgent] = useState<Record<string, ApiConfigFile[]>>({})
-
-  useEffect(() => {
-    agentRegistry.getAll().forEach((agent) => {
-      api.agents.files(agent.id, projectPath)
-        .then((files) => setFilesByAgent((prev) => ({ ...prev, [agent.id]: files })))
-        .catch(console.error)
-    })
-  }, [projectPath])
+  const { filesByAgent } = useAgents()
+  const { loading } = useAppStore()
+  const agents = agentRegistry.getAll()
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="flex-1 overflow-auto p-6 animate-fade-in">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-text-primary">当前生效</h1>
         <p className="mt-1 text-sm text-text-secondary">
@@ -27,14 +20,14 @@ export function ActiveConfig() {
       </div>
 
       <div className="space-y-4">
-        {agentRegistry.getAll().map((agent) => {
+        {agents.map((agent) => {
           const files = filesByAgent[agent.id] ?? []
           const active = files.filter((f) => f.exists)
           const inactive = files.filter((f) => !f.exists)
+          const isLoading = loading && files.length === 0
 
           return (
             <div key={agent.id} className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
-              {/* Agent header */}
               <div className="px-4 py-3 border-b border-border-subtle flex items-center gap-2">
                 <div
                   className="w-5 h-5 rounded-md flex items-center justify-center"
@@ -44,32 +37,31 @@ export function ActiveConfig() {
                 </div>
                 <span className="text-sm font-medium text-text-primary">{agent.name}</span>
                 <span className="ml-auto text-xs text-text-tertiary">
-                  {active.length} / {files.length} 个文件生效
+                  {isLoading ? '检测中…' : `${active.length} / ${files.length} 个文件生效`}
                 </span>
               </div>
 
-              {/* Active files */}
-              {active.length > 0 && (
-                <div className="px-4 py-2">
-                  <div className="text-2xs font-medium text-text-tertiary mb-1.5 mt-1">已生效</div>
-                  <div className="space-y-1">
-                    {active.map((f) => (
-                      <ActiveFileRow key={f.key} file={f} exists />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Inactive files */}
-              {inactive.length > 0 && (
-                <div className="px-4 py-2 border-t border-border-subtle/50">
-                  <div className="text-2xs font-medium text-text-tertiary mb-1.5 mt-1">未创建（可选）</div>
-                  <div className="space-y-1">
-                    {inactive.map((f) => (
-                      <ActiveFileRow key={f.key} file={f} exists={false} />
-                    ))}
-                  </div>
-                </div>
+              {isLoading ? (
+                <TableSkeleton rows={3} />
+              ) : (
+                <>
+                  {active.length > 0 && (
+                    <div className="px-4 py-2">
+                      <div className="text-2xs font-medium text-text-tertiary mb-1.5 mt-1">已生效</div>
+                      <div className="space-y-1">
+                        {active.map((f) => <ActiveFileRow key={f.key} file={f} exists />)}
+                      </div>
+                    </div>
+                  )}
+                  {inactive.length > 0 && (
+                    <div className="px-4 py-2 border-t border-border-subtle/50">
+                      <div className="text-2xs font-medium text-text-tertiary mb-1.5 mt-1">未创建（可选）</div>
+                      <div className="space-y-1">
+                        {inactive.map((f) => <ActiveFileRow key={f.key} file={f} exists={false} />)}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )

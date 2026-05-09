@@ -1,25 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search } from 'lucide-react'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
-import { api } from '@/core/api'
+import { useAgents } from '@/hooks/useAgents'
 import type { ApiConfigFile } from '@/core/api'
 import { FileDetail } from './FileDetail'
+import { CountBadge } from '@/components/ui/Badges'
+import { EmptyState } from '@/components/ui/Skeleton'
 
 export function ConfigFiles() {
-  const { agentFiles, setAgentFiles, selectedFile, setSelectedFile, projectPath } = useAppStore()
+  const { selectedFile, setSelectedFile, refreshing } = useAppStore()
+  const { filesByAgent, refresh } = useAgents()
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ claude: true, codex: true })
 
   const agents = agentRegistry.getAll()
-
-  useEffect(() => {
-    agents.forEach((agent) => {
-      api.agents.files(agent.id, projectPath)
-        .then((files) => setAgentFiles(agent.id, files))
-        .catch(console.error)
-    })
-  }, [projectPath])
 
   const toggle = (id: string) =>
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -33,25 +28,22 @@ export function ConfigFiles() {
         )
       : files
 
+  const totalFiles = Object.values(filesByAgent).flat()
+  const activeTotal = totalFiles.filter((f) => f.exists).length
+
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Middle panel: file tree */}
-      <div className="w-72 border-r border-border-default flex flex-col bg-surface-base">
-        {/* Header */}
+      <div className="w-72 border-r border-border-default flex flex-col bg-surface-base flex-shrink-0">
         <div className="px-4 py-3 border-b border-border-default">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-text-primary">配置文件与路径</span>
             <button
-              onClick={() =>
-                agents.forEach((a) =>
-                  api.agents.files(a.id, projectPath)
-                    .then((f) => setAgentFiles(a.id, f))
-                    .catch(console.error)
-                )
-              }
-              className="text-text-tertiary hover:text-text-secondary transition-colors"
+              onClick={refresh}
+              disabled={refreshing}
+              title="刷新 (⌘R)"
+              className="text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             </button>
           </div>
           <div className="relative">
@@ -66,16 +58,15 @@ export function ConfigFiles() {
           </div>
         </div>
 
-        {/* File tree */}
         <div className="flex-1 overflow-auto py-2">
           {agents.map((agent) => {
-            const files = filterFiles(agentFiles[agent.id] ?? [])
+            const all = filesByAgent[agent.id] ?? []
+            const files = filterFiles(all)
             const isOpen = expanded[agent.id] ?? true
-            const activeCount = files.filter((f) => f.exists).length
+            const activeCount = all.filter((f) => f.exists).length
 
             return (
               <div key={agent.id} className="mb-1">
-                {/* Agent group header */}
                 <button
                   onClick={() => toggle(agent.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-hover transition-colors"
@@ -87,24 +78,21 @@ export function ConfigFiles() {
                   >
                     <agent.Icon size={11} color={agent.color} />
                   </div>
-                  <div className="flex-1 text-left">
-                    <div className="text-xs font-medium text-text-primary">{agent.shortName}</div>
-                    <div className="text-2xs text-text-tertiary">{agent.globalDir}</div>
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="text-xs font-medium text-text-primary truncate">{agent.shortName}</div>
+                    <div className="text-2xs text-text-tertiary truncate">{agent.globalDir}</div>
                   </div>
-                  <AgentStatusBadge activeCount={activeCount} total={files.length} />
+                  <CountBadge active={activeCount} total={all.length} />
                 </button>
 
-                {/* Files */}
                 {isOpen && (
-                  <div className="ml-4">
+                  <div className="ml-4 animate-fade-in">
                     {files.map((file) => (
                       <FileTreeItem
                         key={file.key}
                         file={file}
                         agentId={agent.id}
-                        isSelected={
-                          selectedFile?.agentId === agent.id && selectedFile?.fileKey === file.key
-                        }
+                        isSelected={selectedFile?.agentId === agent.id && selectedFile?.fileKey === file.key}
                         onSelect={() => setSelectedFile({ agentId: agent.id, fileKey: file.key, path: file.path })}
                       />
                     ))}
@@ -118,34 +106,22 @@ export function ConfigFiles() {
           })}
         </div>
 
-        {/* Footer */}
         <div className="px-4 py-2 border-t border-border-default flex items-center justify-between">
           <span className="text-2xs text-text-tertiary">
-            共 {Object.values(agentFiles).flat().length} 个项目，
-            {Object.values(agentFiles).flat().filter((f) => f.exists).length} 个活跃
+            共 {totalFiles.length} 个，{activeTotal} 个活跃
           </span>
-          <RefreshCw size={12} className="text-text-tertiary cursor-pointer hover:text-text-secondary" />
         </div>
       </div>
 
-      {/* Right panel: file detail */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto bg-white">
         {selectedFile ? (
           <FileDetail agentId={selectedFile.agentId} fileKey={selectedFile.fileKey} />
         ) : (
-          <EmptyDetail />
+          <EmptyState title="选择左侧文件查看详情" hint="按 / 聚焦搜索，⌘R 刷新" />
         )}
       </div>
     </div>
   )
-}
-
-function AgentStatusBadge({ activeCount, total }: { activeCount: number; total: number }) {
-  if (activeCount === 0)
-    return <span className="text-2xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">未安装</span>
-  if (activeCount === total)
-    return <span className="text-2xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">活跃中</span>
-  return <span className="text-2xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">部分</span>
 }
 
 function FileTreeItem({
@@ -182,30 +158,15 @@ function FileTreeItem({
 
 function FileStatusTag({ status, exists }: { status: string; exists: boolean }) {
   if (!exists) return <span className="text-2xs text-text-tertiary">缺失</span>
-  const map: Record<string, string> = {
+  const labels: Record<string, string> = { active: '活跃', optional: '可选', available: '可用' }
+  const colors: Record<string, string> = {
     active: 'text-status-active',
     optional: 'text-text-tertiary',
     available: 'text-text-tertiary',
   }
-  const labels: Record<string, string> = {
-    active: '活跃',
-    optional: '可选',
-    available: '可用',
-  }
   return (
-    <span className={`text-2xs ${map[status] ?? 'text-text-tertiary'}`}>
+    <span className={`text-2xs ${colors[status] ?? 'text-text-tertiary'}`}>
       {labels[status] ?? status}
     </span>
-  )
-}
-
-function EmptyDetail() {
-  return (
-    <div className="flex-1 flex items-center justify-center h-full text-text-tertiary">
-      <div className="text-center">
-        <File size={32} className="mx-auto mb-3 opacity-30" />
-        <p className="text-sm">选择左侧文件查看详情</p>
-      </div>
-    </div>
   )
 }
