@@ -122,7 +122,7 @@ function OverviewTab({
   const projectFiles = files.filter((f) => f.scope === 'project')
 
   return (
-    <div className="flex-1 overflow-auto p-6 space-y-5 animate-fade-in">
+    <div className="h-full overflow-auto p-6 space-y-5 animate-fade-in">
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="已存在" value={existingFiles.length} color="text-status-active" />
         <StatCard label="未创建" value={missingFiles.length} color="text-text-tertiary" />

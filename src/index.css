@@ -17,20 +17,33 @@
     color: #1D1D1F;
   }
 
-  /* Custom scrollbar */
+  /* Custom scrollbar — 始终可见，避免 macOS 默认仅滚动时显示 */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #D1D1D6;
-    border-radius: 3px;
+    background: #C7C7CC;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    min-height: 30px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #AEAEB2;
+    background: #8E8E93;
+    background-clip: content-box;
+    border: 2px solid transparent;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* Firefox / 现代浏览器 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #C7C7CC transparent;
   }
 
   /* Consistent focus rings — only show on keyboard navigation */

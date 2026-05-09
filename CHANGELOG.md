@@ -8,7 +8,9 @@
 ## [Unreleased] — 2026-05-09 (三)
 
 ### 修复
-- AgentConfigPage 外层缺 `flex-1 min-w-0`，导致宽窗口下右侧大片留白。`<main>` 为 flex row 容器，子元素需显式声明 `flex-1` 才能撑满剩余宽度
+- AgentConfigPage 外层缺 `flex-1 min-w-0`，导致宽窗口下右侧大片留白
+- `OverviewTab` 用 `flex-1 overflow-auto`，但父级不是 flex 容器，`flex-1` 失效导致高度按内容撑开、永不触发滚动 → 改为 `h-full overflow-auto`
+- 自定义滚动条加宽到 10px，颜色更明显（`#C7C7CC`，hover 变深），并补 Firefox 的 `scrollbar-width/scrollbar-color`，避免 macOS 默认隐藏式滚动条看不见的问题
 
 ---
 
