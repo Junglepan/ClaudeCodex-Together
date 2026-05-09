@@ -5,7 +5,7 @@ import { Overview } from './Overview'
 export const overviewModule: ModuleDefinition = {
   id: 'overview',
   label: '概览',
-  path: '/',
+  path: '/overview',
   Icon: Home,
   Component: Overview,
 }
