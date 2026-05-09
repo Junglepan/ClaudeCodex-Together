@@ -4,7 +4,7 @@ import path from 'path'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 const BACKEND_PORT = 8765
-const FRONTEND_PORT = 5173
+const FRONTEND_PORT = 5174
 
 let mainWindow: BrowserWindow | null = null
 let backendProcess: ChildProcess | null = null
@@ -59,8 +59,9 @@ function createWindow() {
 
   mainWindow.loadURL(url)
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools()
+  // Open DevTools only when explicitly requested (CCT_DEVTOOLS=1)
+  if (isDev && process.env.CCT_DEVTOOLS === '1') {
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
   // Open external links in system browser

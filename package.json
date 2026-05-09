@@ -8,10 +8,10 @@
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "vite",
     "dev:backend": "cd backend && python3 -m uvicorn main:app --host 127.0.0.1 --port 8765 --reload",
-    "dev:electron": "wait-on http://127.0.0.1:5173 && electron dist-electron/main.js",
+    "dev:electron": "wait-on http://127.0.0.1:5174 && electron dist-electron/main.js",
     "build": "tsc && vite build && electron-builder",
     "build:frontend": "vite build",
-    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:electron": "tsc -p electron/tsconfig.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'}))\"",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
