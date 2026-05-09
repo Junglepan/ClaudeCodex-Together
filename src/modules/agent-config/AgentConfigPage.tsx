@@ -1,0 +1,405 @@
+import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List } from 'lucide-react'
+import { agentRegistry } from '@/core/agent-registry'
+import { useAppStore } from '@/store'
+import { api } from '@/core/api'
+import type { ApiConfigFile, ApiAgentSummary } from '@/core/api'
+import { FileDetail } from '../config-files/FileDetail'
+import { ClaudeRelTree } from './ClaudeRelTree'
+
+interface SelectedFile {
+  agentId: string
+  fileKey: string
+  path: string
+}
+
+interface Props {
+  agentId: string
+}
+
+type Tab = 'overview' | 'files'
+
+export function AgentConfigPage({ agentId }: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const { agentSummaries, setAgentSummaries, agentFiles, setAgentFiles, projectPath } = useAppStore()
+  const agent = agentRegistry.get(agentId)
+
+  useEffect(() => {
+    api.agents.list(projectPath).then(setAgentSummaries).catch(console.error)
+    api.agents.files(agentId, projectPath).then((f) => setAgentFiles(agentId, f)).catch(console.error)
+  }, [agentId, projectPath])
+
+  if (!agent) return <div className="p-6 text-text-tertiary text-sm">未知 Agent</div>
+
+  const summary = agentSummaries.find((s) => s.id === agentId)
+  const files = agentFiles[agentId] ?? []
+  const activeFiles = files.filter((f) => f.exists)
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Agent header */}
+      <div className="px-6 py-4 border-b border-border-default flex items-center gap-4 flex-shrink-0 bg-white">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${agent.color}18` }}
+        >
+          <agent.Icon size={20} color={agent.color} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-base font-semibold text-text-primary">{agent.name}</h1>
+            {summary && <StatusBadge status={summary.status} />}
+          </div>
+          <div className="flex items-center gap-3 mt-0.5 text-2xs text-text-tertiary">
+            <code className="font-mono">{agent.globalDir}</code>
+            <span>·</span>
+            <span className="text-status-active font-medium">{activeFiles.length}</span>
+            <span>个文件已存在</span>
+            <span>·</span>
+            <span>{files.length - activeFiles.length} 个未创建</span>
+          </div>
+        </div>
+        <button
+          onClick={() => api.agents.files(agentId, projectPath).then((f) => setAgentFiles(agentId, f)).catch(console.error)}
+          className="text-text-tertiary hover:text-text-secondary transition-colors p-1.5 rounded-lg hover:bg-surface-hover"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="px-6 border-b border-border-default flex gap-0 flex-shrink-0 bg-white">
+        <TabBtn id="overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}
+          icon={<LayoutGrid size={13} />} label="总览" />
+        <TabBtn id="files" active={activeTab === 'files'} onClick={() => setActiveTab('files')}
+          icon={<List size={13} />} label="配置明细" />
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'overview' ? (
+          <OverviewTab agentId={agentId} files={files} summary={summary} />
+        ) : (
+          <FilesTab agentId={agentId} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Tab button ────────────────────────────────────────────────────────────────
+
+function TabBtn({
+  id, active, onClick, icon, label,
+}: {
+  id: string
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-4 py-3 text-sm border-b-2 transition-colors ${
+        active
+          ? 'border-accent-blue text-accent-blue font-medium'
+          : 'border-transparent text-text-secondary hover:text-text-primary'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+// ── Overview tab ──────────────────────────────────────────────────────────────
+
+function OverviewTab({
+  agentId,
+  files,
+  summary,
+}: {
+  agentId: string
+  files: ApiConfigFile[]
+  summary?: ApiAgentSummary
+}) {
+  const agent = agentRegistry.get(agentId)!
+  const existingFiles = files.filter((f) => f.exists)
+  const missingFiles = files.filter((f) => !f.exists)
+
+  const globalFiles = files.filter((f) => f.scope === 'global')
+  const projectFiles = files.filter((f) => f.scope === 'project')
+
+  return (
+    <div className="flex-1 overflow-auto p-6 space-y-5">
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="已存在" value={existingFiles.length} color="text-status-active" />
+        <StatCard label="未创建" value={missingFiles.length} color="text-text-tertiary" />
+        <StatCard label="全局范围" value={globalFiles.length} color="text-text-secondary" />
+        <StatCard label="项目范围" value={projectFiles.length} color="text-text-secondary" />
+      </div>
+
+      {/* File status grid */}
+      <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+          <h2 className="text-sm font-medium text-text-primary">文件状态</h2>
+          <div className="flex items-center gap-3 text-2xs text-text-tertiary">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-status-active inline-block" /> 已存在</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-border-default inline-block" /> 未创建</span>
+          </div>
+        </div>
+        <div className="divide-y divide-border-subtle">
+          {files.map((f) => (
+            <div key={f.key} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-hover transition-colors">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${f.exists ? 'bg-status-active' : 'bg-border-default'}`} />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium text-text-primary">{f.label}</span>
+                <code className="ml-2 text-2xs text-text-tertiary font-mono">{f.path}</code>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <ScopeBadge scope={f.scope} />
+                <FormatBadge format={f.format} />
+                {f.status === 'active' && <span className="text-2xs text-status-active">活跃</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Relationship tree — Claude only */}
+      {agentId === 'claude' && (
+        <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border-subtle">
+            <h2 className="text-sm font-medium text-text-primary">配置关系与优先级</h2>
+            <p className="text-2xs text-text-tertiary mt-0.5">Claude Code 配置文件的加载顺序、合并策略与作用域</p>
+          </div>
+          <div className="p-4">
+            <ClaudeRelTree />
+          </div>
+        </div>
+      )}
+
+      {/* Codex overview note */}
+      {agentId === 'codex' && (
+        <div className="bg-white border border-border-default rounded-xl p-4">
+          <h2 className="text-sm font-medium text-text-primary mb-3">配置层次说明</h2>
+          <div className="space-y-2.5">
+            <HierarchyItem step={1} label="全局配置" path="~/.codex/config.toml" desc="全局行为设置，适用于所有项目" />
+            <HierarchyItem step={2} label="全局指令" path="~/.codex/AGENTS.md" desc="全局 Agent 行为指令，每个会话注入" />
+            <HierarchyItem step={3} label="项目指令" path="./AGENTS.md" desc="项目级指令，优先级高于全局（覆盖）" />
+            <HierarchyItem step={4} label="全局 Skills" path="~/.agents/skills/" desc="全局可用技能，通过 /skill 调用" />
+            <HierarchyItem step={5} label="项目 Agents" path=".codex/agents/" desc="项目专属 Agent 定义" />
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="bg-white border border-border-default rounded-xl px-4 py-3 text-center">
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className="text-2xs text-text-tertiary mt-0.5">{label}</div>
+    </div>
+  )
+}
+
+function HierarchyItem({ step, label, path, desc }: { step: number; label: string; path: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-5 h-5 rounded-full bg-surface-base border border-border-default flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span className="text-2xs font-bold text-text-tertiary">{step}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-text-primary">{label}</span>
+          <code className="text-2xs font-mono text-text-tertiary bg-surface-base px-1.5 py-0.5 rounded">{path}</code>
+        </div>
+        <p className="text-2xs text-text-tertiary mt-0.5">{desc}</p>
+      </div>
+    </div>
+  )
+}
+
+function ScopeBadge({ scope }: { scope: string }) {
+  return scope === 'global' ? (
+    <span className="text-2xs px-1.5 py-0.5 rounded bg-surface-base text-text-tertiary">全局</span>
+  ) : (
+    <span className="text-2xs px-1.5 py-0.5 rounded bg-accent-blue/8 text-accent-blue">项目</span>
+  )
+}
+
+function FormatBadge({ format }: { format: string }) {
+  const colors: Record<string, string> = {
+    json: 'text-accent-orange',
+    markdown: 'text-accent-blue',
+    toml: 'text-accent-purple',
+    shell: 'text-accent-green',
+    dir: 'text-text-tertiary',
+  }
+  return (
+    <span className={`text-2xs uppercase font-mono ${colors[format] ?? 'text-text-tertiary'}`}>{format}</span>
+  )
+}
+
+// ── Files tab ─────────────────────────────────────────────────────────────────
+
+function FilesTab({ agentId }: { agentId: string }) {
+  const { agentFiles, selectedFile, setSelectedFile, projectPath, setAgentFiles } = useAppStore()
+  const [search, setSearch] = useState('')
+
+  const agent = agentRegistry.get(agentId)!
+  const files = agentFiles[agentId] ?? []
+
+  const filtered = search
+    ? files.filter(
+        (f) =>
+          f.label.toLowerCase().includes(search.toLowerCase()) ||
+          f.path.toLowerCase().includes(search.toLowerCase())
+      )
+    : files
+
+  const globalFiles = filtered.filter((f) => f.scope === 'global')
+  const projectFiles = filtered.filter((f) => f.scope === 'project')
+
+  return (
+    <div className="flex flex-1 h-full overflow-hidden">
+      {/* Left: file tree */}
+      <div className="w-72 border-r border-border-default flex flex-col bg-surface-base flex-shrink-0">
+        {/* Search */}
+        <div className="px-3 py-2.5 border-b border-border-default">
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
+            <input
+              type="text"
+              placeholder="搜索文件"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* File groups */}
+        <div className="flex-1 overflow-auto py-2">
+          <FileGroup
+            label="全局配置"
+            files={globalFiles}
+            agentId={agentId}
+            selectedFile={selectedFile}
+            onSelect={setSelectedFile}
+          />
+          <FileGroup
+            label="项目配置"
+            files={projectFiles}
+            agentId={agentId}
+            selectedFile={selectedFile}
+            onSelect={setSelectedFile}
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="px-3 py-2 border-t border-border-default flex items-center justify-between">
+          <span className="text-2xs text-text-tertiary">
+            {files.filter((f) => f.exists).length}/{files.length} 个活跃
+          </span>
+          <button
+            onClick={() => api.agents.files(agentId, projectPath).then((f) => setAgentFiles(agentId, f)).catch(console.error)}
+            className="text-text-tertiary hover:text-text-secondary"
+          >
+            <RefreshCw size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* Right: detail */}
+      <div className="flex-1 overflow-auto">
+        {selectedFile && selectedFile.agentId === agentId ? (
+          <FileDetail agentId={selectedFile.agentId} fileKey={selectedFile.fileKey} />
+        ) : (
+          <EmptyDetail />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FileGroup({
+  label,
+  files,
+  agentId,
+  selectedFile,
+  onSelect,
+}: {
+  label: string
+  files: ApiConfigFile[]
+  agentId: string
+  selectedFile: SelectedFile | null
+  onSelect: (f: SelectedFile | null) => void
+}) {
+  const [open, setOpen] = useState(true)
+  if (files.length === 0) return null
+
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-2xs font-semibold text-text-tertiary uppercase tracking-wider hover:bg-surface-hover transition-colors"
+      >
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        {label}
+        <span className="ml-auto font-normal normal-case tracking-normal">{files.filter((f) => f.exists).length}/{files.length}</span>
+      </button>
+      {open && files.map((file) => {
+        const isSelected = selectedFile?.agentId === agentId && selectedFile?.fileKey === file.key
+        const Icon = file.kind === 'dir' ? Folder : File
+        return (
+          <button
+            key={file.key}
+            onClick={() => onSelect({ agentId, fileKey: file.key, path: file.path })}
+            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg mx-2 text-left transition-colors ${
+              isSelected
+                ? 'bg-accent-blue/10 text-accent-blue'
+                : 'hover:bg-surface-hover text-text-primary'
+            }`}
+            style={{ width: 'calc(100% - 16px)' }}
+          >
+            <Icon size={12} className={isSelected ? 'text-accent-blue' : 'text-text-tertiary'} />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium truncate">{file.label}</div>
+            </div>
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${file.exists ? 'bg-status-active' : 'bg-border-default'}`} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function EmptyDetail() {
+  return (
+    <div className="flex items-center justify-center h-full text-text-tertiary">
+      <div className="text-center">
+        <File size={28} className="mx-auto mb-2 opacity-25" />
+        <p className="text-sm">选择左侧文件查看详情</p>
+      </div>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    active:        { label: '活跃中',   className: 'bg-green-100 text-green-700' },
+    not_installed: { label: '未安装',   className: 'bg-gray-100 text-gray-400' },
+    partial:       { label: '部分配置', className: 'bg-yellow-100 text-yellow-700' },
+  }
+  const cfg = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-500' }
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.className}`}>{cfg.label}</span>
+  )
+}

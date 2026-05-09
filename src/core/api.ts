@@ -154,6 +154,20 @@ export const api = {
         undefined,
         () => buildMockFileDetail(agentId, fileKey),
       ),
+
+    write: (path: string, content: string) =>
+      request<{ path: string; written: boolean }>(
+        '/files/write',
+        { method: 'POST', body: JSON.stringify({ path, content }) },
+        () => { console.info('[mock] write', path); return { path, written: true } },
+      ),
+
+    delete: (path: string) =>
+      request<{ path: string; deleted: boolean }>(
+        `/files/delete?path=${encodeURIComponent(path)}`,
+        { method: 'DELETE' },
+        () => { console.info('[mock] delete', path); return { path, deleted: true } },
+      ),
   },
 
   sync: {

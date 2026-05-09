@@ -3,25 +3,37 @@
  * To add a new module: import its definition and call moduleRegistry.register()
  */
 import { moduleRegistry } from '@/core/module-registry'
-import { overviewModule }     from './overview'
+import { overviewModule }                    from './overview'
+import { claudeConfigModule, codexConfigModule } from './agent-config'
+import { syncModule }                        from './sync'
+import { helpModule }                        from './help'
+// Legacy modules kept as hidden routes (accessible by direct URL)
 import { configFilesModule }  from './config-files'
 import { activeConfigModule } from './active-config'
 import { pathMappingModule }  from './path-mapping'
-import { syncModule }         from './sync'
-import { helpModule }         from './help'
 
+// ── Main nav ─────────────────────────────────────────────────────────────────
 moduleRegistry.register(overviewModule)
-moduleRegistry.register(configFilesModule)
-moduleRegistry.register(activeConfigModule)
-moduleRegistry.register(pathMappingModule)
+
+// 配置管理 section (grouped under "配置管理" header)
+moduleRegistry.register(claudeConfigModule)
+moduleRegistry.register(codexConfigModule)
+
+// Tools
 moduleRegistry.register(syncModule)
+
+// Bottom nav
 moduleRegistry.register(helpModule)
+
+// ── Hidden legacy routes (no sidebar entry) ───────────────────────────────────
+moduleRegistry.register({ ...configFilesModule,  showInNav: false })
+moduleRegistry.register({ ...activeConfigModule, showInNav: false })
+moduleRegistry.register({ ...pathMappingModule,  showInNav: false })
 
 export {
   overviewModule,
-  configFilesModule,
-  activeConfigModule,
-  pathMappingModule,
+  claudeConfigModule,
+  codexConfigModule,
   syncModule,
   helpModule,
 }

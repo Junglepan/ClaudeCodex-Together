@@ -1,10 +1,20 @@
 from fastapi import APIRouter, Query, HTTPException
 from pathlib import Path
 from typing import Optional
+from pydantic import BaseModel
 
 from core.agents.registry import registry
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+class WriteBody(BaseModel):
+    path: str
+    content: str
+
+
+class DeleteBody(BaseModel):
+    path: str
 
 
 @router.get("/meta")
@@ -62,3 +72,28 @@ def read_file(path: str = Query(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"path": str(p), "content": content}
+
+
+@router.post("/write")
+def write_file(body: WriteBody):
+    p = Path(body.path).expanduser()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body.content, encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"path": str(p), "written": True}
+
+
+@router.delete("/delete")
+def delete_file(path: str = Query(...)):
+    p = Path(path).expanduser()
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    if p.is_dir():
+        raise HTTPException(status_code=400, detail="Path is a directory — use a targeted file path")
+    try:
+        p.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"path": str(p), "deleted": True}
