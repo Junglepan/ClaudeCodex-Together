@@ -1,56 +1,18 @@
 /**
- * Backend API client.
- * In dev/preview mode without a running backend, automatically falls back
- * to mock data so the UI can be previewed standalone.
+ * Backend API client. All calls hit the local FastAPI backend via the
+ * Vite proxy at /api → http://127.0.0.1:8765.
  */
-
-import {
-  mockAgents,
-  mockClaudeFiles,
-  mockCodexFiles,
-  mockSyncPlan,
-  mockSyncResult,
-  buildMockFileDetail,
-  mockMeta,
-} from './mock-data'
 
 const BASE = '/api'
 
-// Determine if mock mode is forced (env var) or if backend is unreachable
-const FORCE_MOCK = (import.meta as any).env?.VITE_USE_MOCK === 'true'
-let useMock: boolean | undefined = FORCE_MOCK ? true : undefined
-
-async function probeBackend(): Promise<boolean> {
-  if (useMock !== undefined) return !useMock
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 800)
-    const res = await fetch(`${BASE}/health`, { signal: ctrl.signal })
-    clearTimeout(timer)
-    useMock = !res.ok
-    return res.ok
-  } catch {
-    useMock = true
-    console.info('[CCT] Backend unreachable — running in mock mode with sample data.')
-    return false
-  }
-}
-
-async function request<T>(path: string, options?: RequestInit, mockFn?: () => T): Promise<T> {
-  const ok = await probeBackend()
-  if (!ok && mockFn) {
-    // simulate small latency to make UI feel realistic
-    await new Promise((r) => setTimeout(r, 120))
-    return mockFn()
-  }
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
   if (!res.ok) {
-    if (mockFn) return mockFn()
-    const text = await res.text()
-    throw new Error(`API ${res.status}: ${text}`)
+    const text = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${text || res.statusText}`)
   }
   return res.json() as Promise<T>
 }
@@ -111,62 +73,52 @@ export interface ApiSyncResult {
   skipped: string[]
 }
 
+export interface ApiMeta {
+  project_path: string
+  home_path: string
+  platform: string
+  hostname: string
+  python_version: string
+}
+
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const api = {
-  health: () =>
-    request<{ status: string; version: string }>('/health', undefined, () => ({
-      status: 'ok',
-      version: '0.1.0-mock',
-    })),
+  health: () => request<{ status: string; version: string }>('/health'),
 
-  meta: () => request<typeof mockMeta>('/meta', undefined, () => mockMeta),
+  meta: () => request<ApiMeta>('/meta'),
 
   agents: {
     list: (projectPath?: string) =>
       request<ApiAgentSummary[]>(
         `/agents${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
-        undefined,
-        () => mockAgents,
       ),
 
     files: (agentId: string, projectPath?: string) =>
       request<ApiConfigFile[]>(
         `/agents/${agentId}/files${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
-        undefined,
-        () => (agentId === 'claude' ? mockClaudeFiles : mockCodexFiles),
       ),
   },
 
   files: {
     read: (path: string) =>
-      request<ApiFileDetail>(`/files/read?path=${encodeURIComponent(path)}`, undefined, () => ({
-        path,
-        exists: true,
-        content: '',
-        purpose: '',
-        details: '',
-      })),
+      request<ApiFileDetail>(`/files/read?path=${encodeURIComponent(path)}`),
 
     meta: (agentId: string, fileKey: string, projectPath?: string) =>
       request<ApiFileDetail>(
         `/files/meta?agent=${agentId}&key=${fileKey}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
-        undefined,
-        () => buildMockFileDetail(agentId, fileKey),
       ),
 
     write: (path: string, content: string) =>
       request<{ path: string; written: boolean }>(
         '/files/write',
         { method: 'POST', body: JSON.stringify({ path, content }) },
-        () => { console.info('[mock] write', path); return { path, written: true } },
       ),
 
     delete: (path: string) =>
       request<{ path: string; deleted: boolean }>(
         `/files/delete?path=${encodeURIComponent(path)}`,
         { method: 'DELETE' },
-        () => { console.info('[mock] delete', path); return { path, deleted: true } },
       ),
   },
 
@@ -175,7 +127,6 @@ export const api = {
       request<ApiSyncPlan>(
         '/sync/plan',
         { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
-        () => mockSyncPlan,
       ),
 
     execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
@@ -185,7 +136,6 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ scope, project_path: projectPath, replace, dry_run: false }),
         },
-        () => mockSyncResult,
       ),
 
     dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
@@ -195,12 +145,6 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ scope, project_path: projectPath, replace: false, dry_run: true }),
         },
-        () => ({ ...mockSyncResult, dry_run: true, written: mockSyncResult.written.map((p) => `[dry-run] ${p}`) }),
       ),
   },
-}
-
-// Expose mock-mode flag for UI banner
-export function isMockMode(): boolean {
-  return useMock === true
 }
