@@ -1,5 +1,6 @@
 {
   "name": "cct",
+  "type": "module",
   "version": "0.1.0",
   "description": "Claude / Codex Configuration Manager",
   "main": "dist-electron/main.js",

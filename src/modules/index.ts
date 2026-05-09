@@ -1,19 +1,27 @@
 /**
- * Module registrations
+ * Module registrations — order determines sidebar position.
  * To add a new module: import its definition and call moduleRegistry.register()
  */
 import { moduleRegistry } from '@/core/module-registry'
-import { overviewModule } from './overview'
-import { configFilesModule } from './config-files'
-import { syncModule } from './sync'
+import { overviewModule }     from './overview'
+import { configFilesModule }  from './config-files'
+import { activeConfigModule } from './active-config'
+import { pathMappingModule }  from './path-mapping'
+import { syncModule }         from './sync'
+import { helpModule }         from './help'
 
 moduleRegistry.register(overviewModule)
 moduleRegistry.register(configFilesModule)
+moduleRegistry.register(activeConfigModule)
+moduleRegistry.register(pathMappingModule)
 moduleRegistry.register(syncModule)
+moduleRegistry.register(helpModule)
 
-// Future modules to add here:
-// moduleRegistry.register(activeConfigModule)   // 当前生效
-// moduleRegistry.register(pathMappingModule)    // 路径映射
-// moduleRegistry.register(sessionsModule)       // 会话管理
-
-export { overviewModule, configFilesModule, syncModule }
+export {
+  overviewModule,
+  configFilesModule,
+  activeConfigModule,
+  pathMappingModule,
+  syncModule,
+  helpModule,
+}

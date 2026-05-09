@@ -82,9 +82,18 @@ class AgentBase(ABC):
     def _home() -> Path:
         return Path.home()
 
+    @staticmethod
+    def _default_project() -> Path:
+        """Project root: prefer CCT_PROJECT env var, else parent of backend dir."""
+        import os
+        env = os.environ.get("CCT_PROJECT")
+        if env:
+            return Path(env)
+        return Path(__file__).parent.parent.parent
+
     def resolve_path(self, template: str, project: Optional[Path] = None) -> Path:
         home = str(self._home())
-        proj = str(project or Path.cwd())
+        proj = str(project or self._default_project())
         return Path(template.format(home=home, project=proj))
 
     def global_dir(self) -> Path:

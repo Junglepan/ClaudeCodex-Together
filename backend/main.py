@@ -44,7 +44,6 @@ def meta():
     """Returns environment context for the frontend."""
     system = platform.system()
     node = platform.node()
-    os_version = platform.version()
 
     platform_label = {
         "Darwin": f"macOS {platform.mac_ver()[0]}",
@@ -52,8 +51,16 @@ def meta():
         "Windows": f"Windows {platform.release()}",
     }.get(system, system)
 
+    # CCT_PROJECT env var lets callers specify the project root explicitly.
+    # Falls back to the parent of the backend dir (repo root when run normally).
+    project_path = os.environ.get("CCT_PROJECT")
+    if not project_path:
+        # backend/ lives inside the project root, go one level up
+        backend_dir = Path(__file__).parent
+        project_path = str(backend_dir.parent)
+
     return {
-        "project_path": str(Path.cwd()),
+        "project_path": project_path,
         "home_path": str(Path.home()),
         "platform": platform_label,
         "hostname": node,

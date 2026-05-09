@@ -38,6 +38,7 @@ export interface ApiConfigFile {
   status: 'active' | 'optional' | 'available' | 'missing'
   size_bytes?: number
   modified_at?: string
+  purpose?: string
 }
 
 export interface ApiFileDetail {
