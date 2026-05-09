@@ -1,23 +1,61 @@
 /**
- * Backend API client
- * All requests go through /api (proxied to FastAPI on port 8765 in dev).
+ * Backend API client.
+ * In dev/preview mode without a running backend, automatically falls back
+ * to mock data so the UI can be previewed standalone.
  */
+
+import {
+  mockAgents,
+  mockClaudeFiles,
+  mockCodexFiles,
+  mockSyncPlan,
+  mockSyncResult,
+  buildMockFileDetail,
+  mockMeta,
+} from './mock-data'
 
 const BASE = '/api'
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+// Determine if mock mode is forced (env var) or if backend is unreachable
+const FORCE_MOCK = (import.meta as any).env?.VITE_USE_MOCK === 'true'
+let useMock: boolean | undefined = FORCE_MOCK ? true : undefined
+
+async function probeBackend(): Promise<boolean> {
+  if (useMock !== undefined) return !useMock
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 800)
+    const res = await fetch(`${BASE}/health`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    useMock = !res.ok
+    return res.ok
+  } catch {
+    useMock = true
+    console.info('[CCT] Backend unreachable — running in mock mode with sample data.')
+    return false
+  }
+}
+
+async function request<T>(path: string, options?: RequestInit, mockFn?: () => T): Promise<T> {
+  const ok = await probeBackend()
+  if (!ok && mockFn) {
+    // simulate small latency to make UI feel realistic
+    await new Promise((r) => setTimeout(r, 120))
+    return mockFn()
+  }
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
   if (!res.ok) {
+    if (mockFn) return mockFn()
     const text = await res.text()
     throw new Error(`API ${res.status}: ${text}`)
   }
   return res.json() as Promise<T>
 }
 
-// ── Agent endpoints ──────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ApiAgentSummary {
   id: string
@@ -73,48 +111,82 @@ export interface ApiSyncResult {
   skipped: string[]
 }
 
-// ── API functions ────────────────────────────────────────────────────────────
+// ── API ──────────────────────────────────────────────────────────────────────
 
 export const api = {
-  health: () => request<{ status: string; version: string }>('/health'),
+  health: () =>
+    request<{ status: string; version: string }>('/health', undefined, () => ({
+      status: 'ok',
+      version: '0.1.0-mock',
+    })),
+
+  meta: () => request<typeof mockMeta>('/meta', undefined, () => mockMeta),
 
   agents: {
     list: (projectPath?: string) =>
-      request<ApiAgentSummary[]>(`/agents${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`),
+      request<ApiAgentSummary[]>(
+        `/agents${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
+        undefined,
+        () => mockAgents,
+      ),
 
     files: (agentId: string, projectPath?: string) =>
       request<ApiConfigFile[]>(
-        `/agents/${agentId}/files${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`
+        `/agents/${agentId}/files${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
+        undefined,
+        () => (agentId === 'claude' ? mockClaudeFiles : mockCodexFiles),
       ),
   },
 
   files: {
     read: (path: string) =>
-      request<ApiFileDetail>(`/files/read?path=${encodeURIComponent(path)}`),
+      request<ApiFileDetail>(`/files/read?path=${encodeURIComponent(path)}`, undefined, () => ({
+        path,
+        exists: true,
+        content: '',
+        purpose: '',
+        details: '',
+      })),
 
     meta: (agentId: string, fileKey: string, projectPath?: string) =>
       request<ApiFileDetail>(
-        `/files/meta?agent=${agentId}&key=${fileKey}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`
+        `/files/meta?agent=${agentId}&key=${fileKey}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
+        undefined,
+        () => buildMockFileDetail(agentId, fileKey),
       ),
   },
 
   sync: {
     plan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncPlan>('/sync/plan', {
-        method: 'POST',
-        body: JSON.stringify({ scope, project_path: projectPath }),
-      }),
+      request<ApiSyncPlan>(
+        '/sync/plan',
+        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
+        () => mockSyncPlan,
+      ),
 
     execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
-      request<ApiSyncResult>('/sync/execute', {
-        method: 'POST',
-        body: JSON.stringify({ scope, project_path: projectPath, replace, dry_run: false }),
-      }),
+      request<ApiSyncResult>(
+        '/sync/execute',
+        {
+          method: 'POST',
+          body: JSON.stringify({ scope, project_path: projectPath, replace, dry_run: false }),
+        },
+        () => mockSyncResult,
+      ),
 
     dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncResult>('/sync/execute', {
-        method: 'POST',
-        body: JSON.stringify({ scope, project_path: projectPath, replace: false, dry_run: true }),
-      }),
+      request<ApiSyncResult>(
+        '/sync/execute',
+        {
+          method: 'POST',
+          body: JSON.stringify({ scope, project_path: projectPath, replace: false, dry_run: true }),
+        },
+        () => ({ ...mockSyncResult, dry_run: true, written: mockSyncResult.written.map((p) => `[dry-run] ${p}`) }),
+      ),
   },
+}
+
+// Expose mock-mode flag for UI banner
+export function isMockMode(): boolean {
+  return useMock === true
 }
