@@ -5,6 +5,13 @@
 
 ---
 
+## [Unreleased] — 2026-05-09 (三)
+
+### 修复
+- AgentConfigPage 外层缺 `flex-1 min-w-0`，导致宽窗口下右侧大片留白。`<main>` 为 flex row 容器，子元素需显式声明 `flex-1` 才能撑满剩余宽度
+
+---
+
 ## [Unreleased] — 2026-05-09 (二)
 
 ### 改动

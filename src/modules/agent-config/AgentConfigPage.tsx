@@ -34,7 +34,7 @@ export function AgentConfigPage({ agentId }: Props) {
   const activeFiles = files.filter((f) => f.exists)
 
   return (
-    <div className="flex flex-col h-full overflow-hidden animate-fade-in">
+    <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden animate-fade-in">
       <div className="px-6 py-4 border-b border-border-default flex items-center gap-4 flex-shrink-0 bg-white">
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
