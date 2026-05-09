@@ -7,6 +7,7 @@ import { overviewModule }                    from './overview'
 import { claudeConfigModule, codexConfigModule } from './agent-config'
 import { syncModule }                        from './sync'
 import { helpModule }                        from './help'
+import { settingsModule }                    from './settings'
 // Legacy modules kept as hidden routes (accessible by direct URL)
 import { configFilesModule }  from './config-files'
 import { activeConfigModule } from './active-config'
@@ -23,6 +24,7 @@ moduleRegistry.register(codexConfigModule)
 moduleRegistry.register(syncModule)
 
 // Bottom nav
+moduleRegistry.register(settingsModule)
 moduleRegistry.register(helpModule)
 
 // ── Hidden legacy routes (no sidebar entry) ───────────────────────────────────
@@ -36,4 +38,5 @@ export {
   codexConfigModule,
   syncModule,
   helpModule,
+  settingsModule,
 }

@@ -5,6 +5,19 @@
 
 ---
 
+## [Unreleased] — 2026-05-09 (二)
+
+### 改动
+- **新增模块**：`偏好`（Settings）— 左侧分区（外观/快捷键/运行环境/关于），TitleBar 偏好按钮接通；持久化的折叠侧栏开关；快捷键参考表；后端探测信息（含可一键复制路径）；版本与 GitHub 链接
+- **Help 模块重构**：左侧锚点目录，IntersectionObserver 高亮当前章节；新增"当前环境"卡片、"键盘快捷键"参考、"已注册的 Agent"可点击跳转；卡片化每一节，hover 与过渡统一
+- **共享层**：新增 `src/lib/shortcut-catalog.ts` 作为快捷键单一信源（Settings 与 Help 共用）
+
+### 文档
+- 合入 `DESIGN.md`（来自远程）
+- `IMPLEMENTATION.md` 同步更新模块目录与共享层
+
+---
+
 ## [Unreleased] — 2026-05-09
 
 ### 改动

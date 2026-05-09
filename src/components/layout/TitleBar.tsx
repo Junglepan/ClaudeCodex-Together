@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Settings, HelpCircle, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { api } from '@/core/api'
@@ -7,6 +8,7 @@ const isElectron =
   typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent)
 
 export function TitleBar() {
+  const navigate = useNavigate()
   const {
     setAgentFiles, setAgentSummaries, projectPath,
     refreshing, setRefreshing, pushToast, setError,
@@ -72,11 +74,11 @@ export function TitleBar() {
           <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
           <span className="text-xs">{refreshing ? '刷新中…' : '刷新'}</span>
         </TitleBarButton>
-        <TitleBarButton title="偏好设置">
+        <TitleBarButton onClick={() => navigate('/settings')} title="偏好设置">
           <Settings size={14} />
           <span className="text-xs">偏好</span>
         </TitleBarButton>
-        <TitleBarButton title="帮助">
+        <TitleBarButton onClick={() => navigate('/help')} title="帮助">
           <HelpCircle size={14} />
           <span className="text-xs">帮助</span>
         </TitleBarButton>

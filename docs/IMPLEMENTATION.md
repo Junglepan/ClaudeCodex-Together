@@ -3,7 +3,7 @@
 > 每次功能迭代或方案更新后刷新本文档，保持其反映**当前**实现而非历史。  
 > 历史记录见 [CHANGELOG.md](../CHANGELOG.md)。
 
-最近更新：2026-05-09
+最近更新：2026-05-09 (二)
 
 ---
 
@@ -86,6 +86,8 @@ src/
 ├── hooks/
 │   ├── useAgents.ts              拉取 summaries + filesByAgent，refresh()
 │   └── useShortcuts.ts           键盘绑定
+├── lib/
+│   └── shortcut-catalog.ts       快捷键展示元数据（Settings + Help 共用）
 ├── components/
 │   ├── layout/                   AppShell / Sidebar / TitleBar
 │   └── ui/                       Badges / Skeleton / Toast
@@ -96,7 +98,8 @@ src/
     ├── agent-config/
     ├── config-files/
     ├── sync/
-    └── help/
+    ├── settings/                 偏好（外观/快捷键/环境/关于）
+    └── help/                     说明（含锚点 TOC）
 ```
 
 ### 3.2 状态管理（Zustand）
@@ -174,7 +177,7 @@ useAgents() ─▶ Promise.all([api.agents.list, api.agents.files * N])
 
 1. 打包验证：`npm run build` + `electron-builder` 全流程，产物启动测试
 2. FileDetail "前往同步中心" 跳转 + 携带预选项
-3. Settings 模块：项目路径切换、主题、字体大小
-4. Help 模块：键盘快捷键参考、文件结构图
+3. Settings：项目路径切换（IPC + native dialog）、深色模式
+4. Help 模块：文件结构图（已加目录、快捷键、Agent 卡片）
 5. 同步前的差异预览（diff）
 6. backend 路径白名单校验（避免越权写）
