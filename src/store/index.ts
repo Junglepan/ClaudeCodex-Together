@@ -13,6 +13,8 @@ interface Toast {
   message: string
 }
 
+export type ThemePref = 'light' | 'dark' | 'auto'
+
 interface AppState {
   // Current project directory (default: cwd from backend)
   projectPath: string | undefined
@@ -26,6 +28,10 @@ interface AppState {
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   setSidebarCollapsed: (v: boolean) => void
+
+  // Theme preference (persisted)
+  theme: ThemePref
+  setTheme: (t: ThemePref) => void
 
   // Agent summaries (from /agents)
   agentSummaries: ApiAgentSummary[]
@@ -47,6 +53,10 @@ interface AppState {
   setRefreshing: (v: boolean) => void
   setError: (e: string | null) => void
 
+  // Backend health (null = unknown, true = ok, false = down)
+  backendHealthy: boolean | null
+  setBackendHealthy: (v: boolean | null) => void
+
   // Toasts
   toasts: Toast[]
   pushToast: (t: Omit<Toast, 'id'>) => void
@@ -54,7 +64,7 @@ interface AppState {
 }
 
 let toastSeq = 0
-const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed']
+const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed', 'theme']
 
 function loadPersisted(): Partial<AppState> {
   if (typeof window === 'undefined') return {}
@@ -94,6 +104,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     persist(get())
   },
 
+  theme: 'auto',
+  setTheme: (theme) => {
+    set({ theme })
+    persist(get())
+  },
+
   agentSummaries: [],
   setAgentSummaries: (agentSummaries) => set({ agentSummaries }),
 
@@ -110,6 +126,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setRefreshing: (refreshing) => set({ refreshing }),
   setError: (error) => set({ error }),
+
+  backendHealthy: null,
+  setBackendHealthy: (backendHealthy) => set({ backendHealthy }),
 
   toasts: [],
   pushToast: (t) => {

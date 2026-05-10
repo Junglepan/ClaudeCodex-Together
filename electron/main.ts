@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 
@@ -35,6 +35,46 @@ function stopBackend() {
   }
 }
 
+// ── IPC handlers ─────────────────────────────────────────────────────────────
+
+function registerIpc() {
+  ipcMain.handle('cct:reveal-in-finder', async (_e, filePath: string) => {
+    shell.showItemInFolder(filePath)
+  })
+
+  ipcMain.handle('cct:open-file', async (_e, filePath: string) => {
+    const err = await shell.openPath(filePath)
+    if (err) throw new Error(err)
+  })
+
+  ipcMain.handle('cct:open-in-terminal', async (_e, dirPath: string) => {
+    if (process.platform === 'darwin') {
+      spawn('open', ['-a', 'Terminal', dirPath])
+    } else if (process.platform === 'win32') {
+      spawn('cmd', ['/c', 'start', 'cmd', '/K', `cd /d "${dirPath}"`], { detached: true })
+    } else {
+      // Try common Linux terminals
+      const candidates = ['gnome-terminal', 'konsole', 'xterm']
+      for (const cmd of candidates) {
+        try {
+          spawn(cmd, [`--working-directory=${dirPath}`])
+          return
+        } catch { /* continue */ }
+      }
+    }
+  })
+
+  ipcMain.handle('cct:pick-directory', async (_e, defaultPath?: string) => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      defaultPath,
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+}
+
 // ── Window ───────────────────────────────────────────────────────────────────
 
 function createWindow() {
@@ -43,7 +83,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: 'hiddenInset',  // macOS: hide title bar, show traffic lights
+    titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: '#F5F5F7',
     webPreferences: {
@@ -78,9 +118,9 @@ function createWindow() {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  registerIpc()
   startBackend()
 
-  // Wait briefly for backend to start before loading UI
   setTimeout(createWindow, isDev ? 0 : 1500)
 
   app.on('activate', () => {

@@ -67,6 +67,8 @@ export function TitleBar() {
         <span className="text-2xs text-text-secondary">仅本地文件</span>
       </div>
 
+      <BackendIndicator />
+
       <div className="flex-1" />
 
       <div className="flex items-center gap-1 no-drag">
@@ -84,6 +86,20 @@ export function TitleBar() {
         </TitleBarButton>
       </div>
     </header>
+  )
+}
+
+function BackendIndicator() {
+  const { backendHealthy } = useAppStore()
+  const tone =
+    backendHealthy === null ? { dot: 'bg-text-tertiary', label: '探测中', cls: 'text-text-tertiary border-border-default' }
+    : backendHealthy        ? { dot: 'bg-status-active animate-pulse', label: '后端在线', cls: 'text-text-secondary border-border-default' }
+    :                         { dot: 'bg-status-error', label: '后端离线', cls: 'text-red-600 border-red-200 bg-red-50' }
+  return (
+    <div className={`ml-2 flex items-center gap-1 px-2 py-0.5 border rounded-full no-drag ${tone.cls}`} title={tone.label}>
+      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+      <span className="text-2xs">{tone.label}</span>
+    </div>
   )
 }
 

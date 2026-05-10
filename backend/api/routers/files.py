@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from core.agents.registry import registry
+from core.safety import ensure_allowed, backup_file
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 class WriteBody(BaseModel):
     path: str
     content: str
+    backup: bool = True   # write a .bak.<ts> copy first if file exists
 
 
 class DeleteBody(BaseModel):
@@ -36,7 +38,6 @@ def file_meta(
     if file.exists and file.kind == "file":
         content = ag.read_file_content(key, project_path)
 
-    # Find counterpart info
     counterpart_path = None
     counterpart_exists = None
     spec = next((s for s in ag.config_file_specs if s.key == key), None)
@@ -78,22 +79,43 @@ def read_file(path: str = Query(...)):
 def write_file(body: WriteBody):
     p = Path(body.path).expanduser()
     try:
+        ensure_allowed(p)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    backup_path = None
+    try:
+        if body.backup and p.exists() and p.is_file():
+            backup_path = backup_file(p)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body.content, encoding="utf-8")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"path": str(p), "written": True}
+    return {
+        "path": str(p),
+        "written": True,
+        "backup_path": str(backup_path) if backup_path else None,
+    }
 
 
 @router.delete("/delete")
 def delete_file(path: str = Query(...)):
     p = Path(path).expanduser()
+    try:
+        ensure_allowed(p)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not p.exists():
         raise HTTPException(status_code=404, detail="File not found")
     if p.is_dir():
         raise HTTPException(status_code=400, detail="Path is a directory — use a targeted file path")
+    backup_path = backup_file(p)
     try:
         p.unlink()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"path": str(p), "deleted": True}
+    return {
+        "path": str(p),
+        "deleted": True,
+        "backup_path": str(backup_path) if backup_path else None,
+    }

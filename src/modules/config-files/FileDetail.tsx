@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle, FolderOpen, Terminal } from 'lucide-react'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import type { ApiFileDetail } from '@/core/api'
 import { ExistsBadge } from '@/components/ui/Badges'
 import { ErrorState } from '@/components/ui/Skeleton'
+import { electronApi, isElectron } from '@/lib/electron-bridge'
 
 interface Props {
   agentId: string
@@ -174,6 +176,22 @@ export function FileDetail({ agentId, fileKey }: Props) {
         <div className="flex items-center gap-2 bg-surface-base border border-border-subtle rounded-lg px-3 py-2">
           <span className="text-2xs text-text-tertiary flex-shrink-0">路径</span>
           <span className="text-xs font-mono text-text-primary flex-1 truncate">{detail.path}</span>
+          {isElectron && detail.exists && (
+            <>
+              <PathAction
+                title="在 Finder 中显示"
+                onClick={() => electronApi.revealInFinder(detail.path).catch((e) => pushToast({ kind: 'error', message: String(e) }))}
+                Icon={FolderOpen}
+              />
+              {fileSpec.kind === 'dir' && (
+                <PathAction
+                  title="在终端打开"
+                  onClick={() => electronApi.openInTerminal(detail.path).catch((e) => pushToast({ kind: 'error', message: String(e) }))}
+                  Icon={Terminal}
+                />
+              )}
+            </>
+          )}
           <CopyBtn text={detail.path} />
         </div>
 
@@ -340,12 +358,7 @@ function CounterpartSection({
           <span className="text-2xs text-text-tertiary">
             {targetExists ? '目标文件已存在，同步将覆盖' : '目标文件不存在，同步将新建'}
           </span>
-          <button
-            className="text-xs px-4 py-1.5 bg-accent-blue text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-40"
-            disabled={notInstalled}
-          >
-            前往同步中心 →
-          </button>
+          <GoToSyncButton disabled={notInstalled} />
         </div>
       </div>
     </InfoSection>
@@ -372,6 +385,31 @@ function PathBox({
         </div>
       )}
     </div>
+  )
+}
+
+function PathAction({ title, onClick, Icon }: { title: string; onClick: () => void; Icon: typeof FolderOpen }) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className="text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0"
+    >
+      <Icon size={12} />
+    </button>
+  )
+}
+
+function GoToSyncButton({ disabled }: { disabled: boolean }) {
+  const navigate = useNavigate()
+  return (
+    <button
+      onClick={() => navigate('/sync')}
+      className="text-xs px-4 py-1.5 bg-accent-blue text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-40 flex items-center gap-1"
+      disabled={disabled}
+    >
+      前往同步中心 <ArrowRight size={12} />
+    </button>
   )
 }
 

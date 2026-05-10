@@ -1,21 +1,33 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { ToastHost } from '@/components/ui/Toast'
+import { CommandPalette } from '@/components/ui/CommandPalette'
+import { ShortcutHelpOverlay } from '@/components/ui/ShortcutHelpOverlay'
 import { moduleRegistry } from '@/core/module-registry'
 import { useAppStore } from '@/store'
 import { api } from '@/core/api'
 import { useShortcuts } from '@/hooks/useShortcuts'
+import { useTheme } from '@/hooks/useTheme'
 import { agentRegistry } from '@/core/agent-registry'
 
 import '@/agents/index'
 import '@/modules/index'
 
-function GlobalShortcuts() {
+function GlobalShortcuts({
+  onOpenPalette,
+  onOpenShortcuts,
+}: {
+  onOpenPalette: () => void
+  onOpenShortcuts: () => void
+}) {
   const navigate = useNavigate()
-  const { setRefreshing, setAgentSummaries, setAgentFiles, projectPath, refreshing, pushToast, setError, toggleSidebar } = useAppStore()
+  const {
+    setRefreshing, setAgentSummaries, setAgentFiles,
+    projectPath, refreshing, pushToast, setError, toggleSidebar,
+  } = useAppStore()
 
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     if (refreshing) return
     setRefreshing(true)
     setError(null)
@@ -33,9 +45,18 @@ function GlobalShortcuts() {
     } finally {
       setRefreshing(false)
     }
-  }
+  }, [refreshing, projectPath, setRefreshing, setAgentSummaries, setAgentFiles, pushToast, setError])
+
+  // Custom event hook so command palette can trigger refresh
+  useEffect(() => {
+    const onRefresh = () => refreshAll()
+    window.addEventListener('cct:refresh', onRefresh)
+    return () => window.removeEventListener('cct:refresh', onRefresh)
+  }, [refreshAll])
 
   useShortcuts([
+    { key: 'k', meta: true, handler: onOpenPalette, ignoreInInput: false },
+    { key: '?',           handler: onOpenShortcuts },
     { key: 'r', meta: true, handler: refreshAll },
     { key: 'b', meta: true, handler: toggleSidebar },
     { key: 'slash', handler: () => {
@@ -49,12 +70,28 @@ function GlobalShortcuts() {
   return null
 }
 
+function ShellWithGlobals() {
+  const [paletteOpen, setPaletteOpen]     = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  return (
+    <>
+      <GlobalShortcuts
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+      />
+      <AppShell />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <ShortcutHelpOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+    </>
+  )
+}
+
 function buildRouter() {
   const modules = moduleRegistry.getAll()
   return createBrowserRouter([
     {
       path: '/',
-      element: <ShellWithShortcuts />,
+      element: <ShellWithGlobals />,
       children: [
         { index: true, element: <Navigate to={modules[0]?.path ?? '/overview'} replace /> },
         ...modules.map((mod) => ({
@@ -66,18 +103,11 @@ function buildRouter() {
   ])
 }
 
-function ShellWithShortcuts() {
-  return (
-    <>
-      <GlobalShortcuts />
-      <AppShell />
-    </>
-  )
-}
-
 export function App() {
-  const { setProjectPath, setPlatform, setError } = useAppStore()
+  const { setProjectPath, setPlatform, setError, setBackendHealthy } = useAppStore()
+  useTheme()
 
+  // Initial meta load + retry while backend is starting
   useEffect(() => {
     let cancelled = false
     const tryMeta = async (attempt = 0) => {
@@ -86,20 +116,35 @@ export function App() {
         if (cancelled) return
         if (d.project_path) setProjectPath(d.project_path)
         if (d.platform) setPlatform(d.platform)
+        setBackendHealthy(true)
       } catch (e) {
         if (cancelled) return
-        // Backend may still be starting (Electron spawns it asynchronously).
-        // Retry a few times with backoff before giving up.
         if (attempt < 8) {
           setTimeout(() => tryMeta(attempt + 1), Math.min(300 * 2 ** attempt, 3000))
         } else {
+          setBackendHealthy(false)
           setError(`无法连接后端：${e instanceof Error ? e.message : String(e)}`)
         }
       }
     }
     tryMeta()
     return () => { cancelled = true }
-  }, [setProjectPath, setPlatform, setError])
+  }, [setProjectPath, setPlatform, setError, setBackendHealthy])
+
+  // Heartbeat: ping /health every 5s, update backendHealthy
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      try {
+        await api.health()
+        if (!cancelled) setBackendHealthy(true)
+      } catch {
+        if (!cancelled) setBackendHealthy(false)
+      }
+    }
+    const id = setInterval(tick, 5000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [setBackendHealthy])
 
   const router = buildRouter()
 

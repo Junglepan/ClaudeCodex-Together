@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react'
 import {
-  Palette, Keyboard, Server, Info as InfoIcon,
-  PanelLeftClose, ExternalLink, Copy, Check, RefreshCw,
+  Palette, Keyboard, Server, Info as InfoIcon, FolderOpen,
+  PanelLeftClose, ExternalLink, Copy, Check, RefreshCw, FolderInput,
+  Sun, Moon, MonitorSmartphone, Download, ShieldCheck,
 } from 'lucide-react'
 import { useAppStore } from '@/store'
+import type { ThemePref } from '@/store'
 import { api } from '@/core/api'
 import type { ApiMeta } from '@/core/api'
 import { SHORTCUTS } from '@/lib/shortcut-catalog'
+import { electronApi, isElectron } from '@/lib/electron-bridge'
 
 const APP_VERSION = '0.1.0'
 const REPO_URL = 'https://github.com/Junglepan/ClaudeCodex-Together'
 
-type SectionId = 'appearance' | 'shortcuts' | 'environment' | 'about'
+type SectionId = 'project' | 'appearance' | 'shortcuts' | 'backup' | 'environment' | 'about'
 
 const SECTIONS: { id: SectionId; label: string; Icon: typeof Palette }[] = [
+  { id: 'project',     label: '项目',     Icon: FolderOpen },
   { id: 'appearance',  label: '外观',     Icon: Palette },
   { id: 'shortcuts',   label: '快捷键',   Icon: Keyboard },
+  { id: 'backup',      label: '备份与导出', Icon: ShieldCheck },
   { id: 'environment', label: '运行环境', Icon: Server },
   { id: 'about',       label: '关于',     Icon: InfoIcon },
 ]
@@ -51,8 +56,10 @@ export function Settings() {
       {/* Body */}
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl px-8 py-6">
+          {active === 'project'     && <ProjectSection />}
           {active === 'appearance'  && <AppearanceSection />}
           {active === 'shortcuts'   && <ShortcutsSection />}
+          {active === 'backup'      && <BackupSection />}
           {active === 'environment' && <EnvironmentSection />}
           {active === 'about'       && <AboutSection />}
         </div>
@@ -61,27 +68,86 @@ export function Settings() {
   )
 }
 
+// ── Section: Project ──────────────────────────────────────────────────────────
+
+function ProjectSection() {
+  const { projectPath, setProjectPath, pushToast } = useAppStore()
+
+  const switchProject = async () => {
+    try {
+      const picked = await electronApi.pickDirectory(projectPath)
+      if (!picked) return
+      setProjectPath(picked)
+      pushToast({ kind: 'success', message: `已切换到 ${picked}` })
+    } catch (e) {
+      pushToast({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  return (
+    <SectionFrame title="项目" subtitle="当前 CCT 管理的项目目录，影响所有 *.project 范围的配置文件路径">
+      <div className="bg-white border border-border-default rounded-xl p-4 space-y-3">
+        <div>
+          <div className="text-2xs text-text-tertiary mb-1">当前目录</div>
+          <code className="text-xs font-mono text-text-primary break-all">{projectPath ?? '探测中…'}</code>
+        </div>
+        {isElectron ? (
+          <button
+            onClick={switchProject}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent-blue text-white hover:bg-blue-600 transition-colors"
+          >
+            <FolderInput size={12} />
+            选择目录…
+          </button>
+        ) : (
+          <p className="text-2xs text-text-tertiary italic">
+            浏览器模式下无法弹出原生目录选择器；通过 Electron 启动可用此功能。
+          </p>
+        )}
+      </div>
+    </SectionFrame>
+  )
+}
+
 // ── Section: Appearance ───────────────────────────────────────────────────────
 
 function AppearanceSection() {
-  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore()
+  const { sidebarCollapsed, setSidebarCollapsed, theme, setTheme } = useAppStore()
+  const themeOptions: { value: ThemePref; label: string; Icon: typeof Sun }[] = [
+    { value: 'light', label: '浅色', Icon: Sun },
+    { value: 'dark',  label: '深色', Icon: Moon },
+    { value: 'auto',  label: '跟随系统', Icon: MonitorSmartphone },
+  ]
   return (
     <SectionFrame title="外观" subtitle="调整界面布局与显示偏好">
+      <SettingRow
+        label="主题"
+        hint="深色模式使用 macOS 风格的中性灰色"
+        control={
+          <div className="flex items-center gap-1 p-0.5 bg-surface-base border border-border-default rounded-lg">
+            {themeOptions.map((opt) => {
+              const active = theme === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setTheme(opt.value)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-2xs transition-colors ${
+                    active ? 'bg-surface-card shadow-sm text-text-primary font-medium' : 'text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  <opt.Icon size={11} />
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        }
+      />
       <SettingRow
         icon={<PanelLeftClose size={16} className="text-text-tertiary" />}
         label="默认折叠侧栏"
         hint="启动时以图标条形式显示侧栏，节省宽度"
-        control={
-          <Toggle
-            checked={sidebarCollapsed}
-            onChange={(v) => setSidebarCollapsed(v)}
-          />
-        }
-      />
-      <SettingRow
-        label="主题"
-        hint="深色模式即将支持"
-        control={<span className="text-2xs text-text-tertiary">浅色（默认）</span>}
+        control={<Toggle checked={sidebarCollapsed} onChange={(v) => setSidebarCollapsed(v)} />}
       />
     </SectionFrame>
   )
@@ -115,6 +181,75 @@ function ShortcutsSection() {
           </div>
         )
       })}
+    </SectionFrame>
+  )
+}
+
+// ── Section: Backup ───────────────────────────────────────────────────────────
+
+function BackupSection() {
+  const { projectPath, pushToast } = useAppStore()
+  const [downloading, setDownloading] = useState(false)
+
+  const exportZip = async () => {
+    setDownloading(true)
+    try {
+      const url = `/api/backup/export${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      const objectUrl = URL.createObjectURL(blob)
+      a.href = objectUrl
+      a.download = `cct-backup-${new Date().toISOString().slice(0, 10)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(objectUrl)
+      pushToast({ kind: 'success', message: '已导出配置 ZIP' })
+    } catch (e) {
+      pushToast({ kind: 'error', message: `导出失败：${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <SectionFrame
+      title="备份与导出"
+      subtitle="文件写入前会自动生成 .bak.<时间戳> 备份；可导出当前所有配置为 ZIP 归档"
+    >
+      <div className="bg-white border border-border-default rounded-xl p-4 mb-3">
+        <div className="flex items-start gap-3">
+          <ShieldCheck size={18} className="text-status-active mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text-primary">写入安全已启用</div>
+            <div className="text-2xs text-text-tertiary mt-0.5 leading-relaxed">
+              所有写入限制在 <code className="font-mono">~/.claude/</code> · <code className="font-mono">~/.codex/</code> · <code className="font-mono">~/.agents/</code> 与当前项目目录内；
+              覆盖前自动备份到同目录 <code className="font-mono">.bak.&lt;时间戳&gt;</code>。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-border-default rounded-xl p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text-primary">导出全部配置</div>
+            <div className="text-2xs text-text-tertiary mt-0.5 leading-relaxed">
+              将 Claude / Codex / .agents 当前已存在的全部文件打包成 ZIP，含 MANIFEST 索引。
+            </div>
+          </div>
+          <button
+            onClick={exportZip}
+            disabled={downloading}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-accent-blue text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            <Download size={12} className={downloading ? 'animate-pulse' : ''} />
+            {downloading ? '导出中…' : '导出 ZIP'}
+          </button>
+        </div>
+      </div>
     </SectionFrame>
   )
 }

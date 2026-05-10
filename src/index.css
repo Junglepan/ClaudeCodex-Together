@@ -3,6 +3,36 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Light theme */
+    --surface-base:   245 245 247;     /* #F5F5F7 */
+    --surface-card:   255 255 255;
+    --surface-hover:  240 240 242;
+    --surface-active: 232 232 236;
+    --border-default: 229 229 234;
+    --border-subtle:  240 240 242;
+    --text-primary:   29 29 31;        /* #1D1D1F */
+    --text-secondary: 110 110 115;
+    --text-tertiary:  174 174 178;
+    --scrollbar-thumb: 199 199 204;    /* #C7C7CC */
+    --scrollbar-thumb-hover: 142 142 147;
+  }
+
+  .dark {
+    /* Dark theme — neutral cool greys */
+    --surface-base:   28 28 30;        /* #1C1C1E */
+    --surface-card:   44 44 46;
+    --surface-hover:  56 56 58;
+    --surface-active: 72 72 74;
+    --border-default: 58 58 60;
+    --border-subtle:  44 44 46;
+    --text-primary:   245 245 247;
+    --text-secondary: 174 174 178;
+    --text-tertiary:  120 120 128;
+    --scrollbar-thumb: 99 99 102;
+    --scrollbar-thumb-hover: 142 142 147;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -13,11 +43,12 @@
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
-    background-color: #F5F5F7;
-    color: #1D1D1F;
+    background-color: rgb(var(--surface-base));
+    color: rgb(var(--text-primary));
+    transition: background-color 200ms, color 200ms;
   }
 
-  /* Custom scrollbar — 始终可见，避免 macOS 默认仅滚动时显示 */
+  /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -26,27 +57,26 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #C7C7CC;
+    background: rgb(var(--scrollbar-thumb));
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: content-box;
     min-height: 30px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #8E8E93;
+    background: rgb(var(--scrollbar-thumb-hover));
     background-clip: content-box;
     border: 2px solid transparent;
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
-  /* Firefox / 现代浏览器 */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #C7C7CC transparent;
+    scrollbar-color: rgb(var(--scrollbar-thumb)) transparent;
   }
 
-  /* Consistent focus rings — only show on keyboard navigation */
+  /* Focus rings */
   :focus { outline: none; }
   :focus-visible {
     outline: 2px solid #007AFF;
@@ -67,7 +97,6 @@
 }
 
 @layer components {
-  /* Drag region for the Electron title bar */
   .drag-region {
     -webkit-app-region: drag;
   }

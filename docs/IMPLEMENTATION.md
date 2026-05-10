@@ -3,7 +3,7 @@
 > 每次功能迭代或方案更新后刷新本文档，保持其反映**当前**实现而非历史。  
 > 历史记录见 [CHANGELOG.md](../CHANGELOG.md)。
 
-最近更新：2026-05-09 (二)
+最近更新：2026-05-09 (四)
 
 ---
 
@@ -67,6 +67,9 @@ backend/
 | `/files/meta` | GET | 单文件元信息 + 内容（≤ 文件型）+ 对照 agent 路径 |
 | `/files/{read,write,delete}` | GET/POST/DELETE | 任意路径的文件 IO（仅 path 校验，无沙箱） |
 | `/sync/plan`, `/sync/execute` | POST | 计算同步项并可选写入 |
+| `/backup/export` | GET | 把所有已存在的 agent 配置打包成 ZIP（含 MANIFEST） |
+
+写入安全：`backend/core/safety.py` 提供 `ensure_allowed(path)` 与 `backup_file(path)`。`POST /files/write` 与 `DELETE /files/delete` 都先做白名单校验（`~/.claude` / `~/.codex` / `~/.agents` / 当前项目目录），再生成 `.bak.<timestamp>` 备份。
 
 ---
 
@@ -87,10 +90,11 @@ src/
 │   ├── useAgents.ts              拉取 summaries + filesByAgent，refresh()
 │   └── useShortcuts.ts           键盘绑定
 ├── lib/
-│   └── shortcut-catalog.ts       快捷键展示元数据（Settings + Help 共用）
+│   ├── shortcut-catalog.ts       快捷键展示元数据（Settings + Help 共用）
+│   └── electron-bridge.ts        renderer 调用 preload IPC 的安全封装
 ├── components/
 │   ├── layout/                   AppShell / Sidebar / TitleBar
-│   └── ui/                       Badges / Skeleton / Toast
+│   └── ui/                       Badges / Skeleton / Toast / CommandPalette / ShortcutHelpOverlay
 ├── agents/                       claude.ts / codex.ts 元数据 + Icon/color
 └── modules/                      每个页面一个目录，自注册到 moduleRegistry
     ├── overview/
@@ -112,6 +116,8 @@ src/
 | `loading`, `refreshing`, `error` | 全局 IO 状态 |
 | `toasts`, `pushToast`, `dismissToast` | 通知 |
 | `sidebarCollapsed`（持久化） | 侧栏折叠状态 |
+| `theme`（持久化） | 主题：'light' / 'dark' / 'auto' |
+| `backendHealthy` | 心跳指示灯：null / true / false |
 
 持久化只覆盖 `sidebarCollapsed`，写入 `localStorage['cct.state']`。
 
@@ -153,11 +159,17 @@ useAgents() ─▶ Promise.all([api.agents.list, api.agents.files * N])
 
 `electron/main.ts`：
 - `BACKEND_PORT=8765`, `FRONTEND_PORT=5174`
-- 启动顺序：`whenReady → startBackend (spawn uvicorn) → createWindow`
+- 启动顺序：`whenReady → registerIpc → startBackend (spawn uvicorn) → createWindow`
 - dev：加载 `http://localhost:5174`；prod：加载 `dist/index.html`
 - DevTools 默认关闭，`CCT_DEVTOOLS=1` 显式开启（detach 模式独立窗口）
 
-`electron/preload.ts`：当前为空骨架，预留给未来 IPC（文件选择、原生菜单等）。
+IPC 通道（`cct:*`）：
+- `cct:reveal-in-finder` → `shell.showItemInFolder`
+- `cct:open-file` → `shell.openPath`
+- `cct:open-in-terminal` → 平台分支（macOS `open -a Terminal`，Windows `cmd /K`，Linux 多候选）
+- `cct:pick-directory` → `dialog.showOpenDialog`
+
+`electron/preload.ts` 通过 `contextBridge.exposeInMainWorld('cct', { ... })` 暴露给 renderer，前端通过 `src/lib/electron-bridge.ts` 调用，无 Electron 时降级为禁用 UI。
 
 ---
 

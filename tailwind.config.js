@@ -1,37 +1,37 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Design system colors matching the mockup
         surface: {
-          base: '#F5F5F7',
-          card: '#FFFFFF',
-          hover: '#F0F0F2',
-          active: '#E8E8EC',
+          base:   'rgb(var(--surface-base) / <alpha-value>)',
+          card:   'rgb(var(--surface-card) / <alpha-value>)',
+          hover:  'rgb(var(--surface-hover) / <alpha-value>)',
+          active: 'rgb(var(--surface-active) / <alpha-value>)',
         },
         border: {
-          default: '#E5E5EA',
-          subtle: '#F0F0F2',
+          default: 'rgb(var(--border-default) / <alpha-value>)',
+          subtle:  'rgb(var(--border-subtle) / <alpha-value>)',
         },
         text: {
-          primary: '#1D1D1F',
-          secondary: '#6E6E73',
-          tertiary: '#AEAEB2',
+          primary:   'rgb(var(--text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+          tertiary:  'rgb(var(--text-tertiary) / <alpha-value>)',
         },
         accent: {
-          blue: '#007AFF',
-          green: '#34C759',
+          blue:   '#007AFF',
+          green:  '#34C759',
           orange: '#FF9500',
-          red: '#FF3B30',
+          red:    '#FF3B30',
           purple: '#AF52DE',
         },
         status: {
-          active: '#34C759',
+          active:  '#34C759',
           warning: '#FF9500',
-          error: '#FF3B30',
-          info: '#007AFF',
+          error:   '#FF3B30',
+          info:    '#007AFF',
           neutral: '#AEAEB2',
         },
       },

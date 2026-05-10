@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, files, sync
+from api.routers import agents, files, sync, backup
 
 app = FastAPI(
     title="CCT Backend",
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(agents.router)
 app.include_router(files.router)
 app.include_router(sync.router)
+app.include_router(backup.router)
 
 
 # ── Core endpoints ───────────────────────────────────────────────────────────
