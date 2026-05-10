@@ -63,7 +63,8 @@ export function TitleBar() {
         {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
       </button>
 
-      <h1 className="ml-2 text-sm font-semibold text-text-primary">Claude / Codex 配置管理</h1>
+      <h1 className="ml-2 text-sm font-semibold text-text-primary">cc-steward</h1>
+      <span className="ml-1.5 text-2xs text-text-tertiary">Claude / Codex 配置管家</span>
 
       <div className="ml-3 flex items-center gap-1 px-2 py-0.5 border border-border-default rounded-full no-drag">
         <span className="w-1.5 h-1.5 rounded-full bg-accent-blue" />

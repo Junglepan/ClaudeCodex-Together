@@ -85,7 +85,7 @@ function ProjectSection() {
   }
 
   return (
-    <SectionFrame title="项目" subtitle="当前 CCT 管理的项目目录，影响所有 *.project 范围的配置文件路径">
+    <SectionFrame title="项目" subtitle="当前 cc-steward 管理的项目目录，影响所有 *.project 范围的配置文件路径">
       <div className="bg-white border border-border-default rounded-xl p-4 space-y-3">
         <div>
           <div className="text-2xs text-text-tertiary mb-1">当前目录</div>
@@ -158,7 +158,7 @@ function AppearanceSection() {
 function ShortcutsSection() {
   const groups = ['全局', '编辑器', '搜索框'] as const
   return (
-    <SectionFrame title="键盘快捷键" subtitle="提高在 CCT 中的操作效率">
+    <SectionFrame title="键盘快捷键" subtitle="提高在 cc-steward 中的操作效率">
       {groups.map((scope) => {
         const items = SHORTCUTS.filter((s) => s.scope === scope)
         if (items.length === 0) return null
@@ -201,7 +201,7 @@ function BackupSection() {
       const a = document.createElement('a')
       const objectUrl = URL.createObjectURL(blob)
       a.href = objectUrl
-      a.download = `cct-backup-${new Date().toISOString().slice(0, 10)}.zip`
+      a.download = `cc-steward-backup-${new Date().toISOString().slice(0, 10)}.zip`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -307,10 +307,10 @@ function EnvironmentSection() {
 
 function AboutSection() {
   return (
-    <SectionFrame title="关于" subtitle="ClaudeCodex-Together (CCT)">
+    <SectionFrame title="关于" subtitle="cc-steward · 本地 Claude Code / Codex 配置管家">
       <div className="bg-white border border-border-default rounded-xl p-5 space-y-4">
         <div className="flex items-baseline gap-3">
-          <span className="text-base font-semibold text-text-primary">CCT</span>
+          <span className="text-base font-semibold text-text-primary">cc-steward</span>
           <span className="text-2xs px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue font-mono">
             v{APP_VERSION}
           </span>

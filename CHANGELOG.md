@@ -5,6 +5,16 @@
 
 ---
 
+## [Unreleased] — 2026-05-09 (六)
+
+### 改名
+- 工具更名 `cct` → **`cc-steward`**（"Claude / Codex Steward"，配置管家）
+- 涉及：`package.json` (name/appId/productName)、`index.html` 标题、TitleBar 主标 + 副标、Settings Project/Shortcuts/About 节、ZIP 导出文件名、`README.md` 重写、`backend/main.py` FastAPI 标题
+- 环境变量：主名改为 `CC_STEWARD_PROJECT` / `CC_STEWARD_DEVTOOLS`，旧 `CCT_PROJECT` / `CCT_DEVTOOLS` 仍兼容
+- 仓库目录路径暂未改名（`ClaudeCodex-Together`），后续可单独迁移
+
+---
+
 ## [Unreleased] — 2026-05-09 (五)
 
 ### 修复

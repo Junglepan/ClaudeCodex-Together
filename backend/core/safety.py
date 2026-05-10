@@ -23,7 +23,7 @@ def _allowed_roots() -> list[Path]:
         home / "AGENTS.md",                        # global codex instructions
     ]
     # Project root from env
-    project = os.environ.get("CCT_PROJECT")
+    project = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
     if project:
         roots.append(Path(project))
     # Plus the current working directory's parent (where backend was launched from)

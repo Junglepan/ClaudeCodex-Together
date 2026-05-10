@@ -84,9 +84,9 @@ class AgentBase(ABC):
 
     @staticmethod
     def _default_project() -> Path:
-        """Project root: prefer CCT_PROJECT env var, else parent of backend dir."""
+        """Project root: prefer CC_STEWARD_PROJECT (or legacy CCT_PROJECT) env var, else parent of backend dir."""
         import os
-        env = os.environ.get("CCT_PROJECT")
+        env = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
         if env:
             return Path(env)
         return Path(__file__).parent.parent.parent

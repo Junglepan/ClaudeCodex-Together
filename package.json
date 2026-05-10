@@ -1,8 +1,8 @@
 {
-  "name": "cct",
+  "name": "cc-steward",
   "type": "module",
   "version": "0.1.0",
-  "description": "Claude / Codex Configuration Manager",
+  "description": "cc-steward — 本地 Claude Code / Codex CLI 配置管家",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
@@ -39,8 +39,8 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.cct.app",
-    "productName": "CCT",
+    "appId": "com.cc-steward.app",
+    "productName": "cc-steward",
     "directories": {
       "output": "dist-app"
     },

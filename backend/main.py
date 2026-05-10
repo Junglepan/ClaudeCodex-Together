@@ -1,5 +1,5 @@
 """
-CCT Backend — FastAPI
+cc-steward Backend — FastAPI
 Serves local file data to the frontend. No network calls, read-only except sync writes.
 """
 
@@ -14,8 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routers import agents, files, sync, backup
 
 app = FastAPI(
-    title="CCT Backend",
-    description="Claude / Codex Configuration Manager — local file API",
+    title="cc-steward Backend",
+    description="Claude / Codex Configuration Steward — local file API",
     version="0.1.0",
 )
 
@@ -55,9 +55,9 @@ def meta():
         "Windows": f"Windows {platform.release()}",
     }.get(system, system)
 
-    # CCT_PROJECT env var lets callers specify the project root explicitly.
-    # Falls back to the parent of the backend dir (repo root when run normally).
-    project_path = os.environ.get("CCT_PROJECT")
+    # CC_STEWARD_PROJECT env var lets callers specify the project root explicitly.
+    # Legacy CCT_PROJECT still accepted. Falls back to backend's parent dir.
+    project_path = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
     if not project_path:
         # backend/ lives inside the project root, go one level up
         backend_dir = Path(__file__).parent

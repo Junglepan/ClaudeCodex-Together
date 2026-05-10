@@ -99,8 +99,8 @@ function createWindow() {
 
   mainWindow.loadURL(url)
 
-  // Open DevTools only when explicitly requested (CCT_DEVTOOLS=1)
-  if (isDev && process.env.CCT_DEVTOOLS === '1') {
+  // Open DevTools only when explicitly requested (CC_STEWARD_DEVTOOLS=1; CCT_DEVTOOLS legacy)
+  if (isDev && (process.env.CC_STEWARD_DEVTOOLS === '1' || process.env.CCT_DEVTOOLS === '1')) {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
