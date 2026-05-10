@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="cc-steward icon">
+  <title>cc-steward</title>
+  <!-- Rounded square background; uses currentColor so the favicon adapts to dark mode via meta theme-color -->
+  <rect x="8" y="8" width="240" height="240" rx="56" ry="56" fill="#FAFAF7"/>
+
+  <!-- Left arc — Claude blue, opens to the right -->
+  <path
+    d="M 96 64 A 64 64 0 1 0 96 192"
+    fill="none"
+    stroke="#2952A3"
+    stroke-width="22"
+    stroke-linecap="round"
+  />
+
+  <!-- Right arc — Codex green, opens to the left -->
+  <path
+    d="M 160 64 A 64 64 0 1 1 160 192"
+    fill="none"
+    stroke="#2F7D4A"
+    stroke-width="22"
+    stroke-linecap="round"
+  />
+
+  <!-- Bridge dot — steward in the middle -->
+  <circle cx="128" cy="128" r="11" fill="#1D1D1F"/>
+</svg>

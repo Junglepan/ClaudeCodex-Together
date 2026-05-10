@@ -5,12 +5,24 @@
 
 ---
 
+## [Unreleased] — 2026-05-10
+
+### 新增
+- **图标多格式产物**
+  - `assets/icon.icns`（1.7 MB，10 档 retina sizes，由 `iconutil` 生成）
+  - `assets/icon.ico`（79 KB，6 档 16-256，由 PIL 生成）
+  - `public/icon.svg`（矢量，作为深色/小尺寸 favicon 主源；PNG 仍作为兜底）
+- electron-builder 三端图标分别指向 `.icns` / `.ico` / `.png`，打包时直出原生格式
+- `index.html` favicon 链优先 SVG，回退 PNG
+
+---
+
 ## [Unreleased] — 2026-05-09 (七)
 
 ### 新增
 - **应用图标**：双弧 + 桥点（Claude 蓝 / Codex 绿，居中圆点 = steward）
 - 落地：`public/icon.png` (favicon) + `assets/icon.png` (Electron BrowserWindow.icon)
-- electron-builder：`build.mac/win/linux.icon` 指向 `assets/icon.png`，打包时自动转 .icns/.ico
+- electron-builder：`build.mac/win/linux.icon` 指向 `assets/icon.png`
 
 ---
 

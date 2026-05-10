@@ -50,8 +50,8 @@
       "backend/**/*",
       "assets/**/*"
     ],
-    "mac":   { "icon": "assets/icon.png" },
-    "win":   { "icon": "assets/icon.png" },
-    "linux": { "icon": "assets/icon.png" }
+    "mac":   { "icon": "assets/icon.icns" },
+    "win":   { "icon": "assets/icon.ico"  },
+    "linux": { "icon": "assets/icon.png"  }
   }
 }
