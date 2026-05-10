@@ -78,6 +78,10 @@ function registerIpc() {
 // ── Window ───────────────────────────────────────────────────────────────────
 
 function createWindow() {
+  const iconPath = isDev
+    ? path.join(__dirname, '..', 'assets', 'icon.png')
+    : path.join(process.resourcesPath, 'assets', 'icon.png')
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -86,6 +90,7 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: '#F5F5F7',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

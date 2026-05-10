@@ -5,6 +5,15 @@
 
 ---
 
+## [Unreleased] — 2026-05-09 (七)
+
+### 新增
+- **应用图标**：双弧 + 桥点（Claude 蓝 / Codex 绿，居中圆点 = steward）
+- 落地：`public/icon.png` (favicon) + `assets/icon.png` (Electron BrowserWindow.icon)
+- electron-builder：`build.mac/win/linux.icon` 指向 `assets/icon.png`，打包时自动转 .icns/.ico
+
+---
+
 ## [Unreleased] — 2026-05-09 (六)
 
 ### 改名

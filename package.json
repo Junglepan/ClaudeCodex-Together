@@ -47,7 +47,11 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "backend/**/*"
-    ]
+      "backend/**/*",
+      "assets/**/*"
+    ],
+    "mac":   { "icon": "assets/icon.png" },
+    "win":   { "icon": "assets/icon.png" },
+    "linux": { "icon": "assets/icon.png" }
   }
 }
