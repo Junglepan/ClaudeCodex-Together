@@ -2,11 +2,16 @@ import { useEffect, useCallback } from 'react'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
+import { withColdStartRetry } from '@/lib/retry'
 
 /**
  * Loads agent summaries + per-agent file lists into the global store.
  * Multiple components can call this; fetches deduplicate at the store boundary
  * (each call replaces the cached result, but they're idempotent reads).
+ *
+ * Cold-start tolerant: when the backend isn't ready yet (vite proxy returns 500
+ * / ECONNREFUSED), retries silently with exponential backoff before surfacing
+ * an error toast.
  */
 export function useAgents(opts: { withFiles?: boolean } = { withFiles: true }) {
   const {
@@ -27,12 +32,12 @@ export function useAgents(opts: { withFiles?: boolean } = { withFiles: true }) {
       else setLoading(true)
       setError(null)
       try {
-        const [summaries, ...fileResults] = await Promise.all([
+        const [summaries, ...fileResults] = await withColdStartRetry(() => Promise.all([
           api.agents.list(projectPath),
           ...(opts.withFiles
             ? agentRegistry.getAll().map((a) => api.agents.files(a.id, projectPath))
             : []),
-        ])
+        ]))
         setAgentSummaries(summaries)
         if (opts.withFiles) {
           agentRegistry.getAll().forEach((a, i) => {
@@ -69,7 +74,7 @@ export function useAgentFiles(agentId: string) {
     async ({ silent = true } = {}) => {
       if (silent) setRefreshing(true)
       try {
-        const files = await api.agents.files(agentId, projectPath)
+        const files = await withColdStartRetry(() => api.agents.files(agentId, projectPath))
         setAgentFiles(agentId, files)
         if (silent) pushToast({ kind: 'success', message: '已刷新' })
       } catch (e) {
@@ -85,7 +90,7 @@ export function useAgentFiles(agentId: string) {
 
   useEffect(() => {
     let cancelled = false
-    api.agents.files(agentId, projectPath)
+    withColdStartRetry(() => api.agents.files(agentId, projectPath))
       .then((files) => { if (!cancelled) setAgentFiles(agentId, files) })
       .catch((e) => { if (!cancelled) setError(String(e)) })
     return () => { cancelled = true }

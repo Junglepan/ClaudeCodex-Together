@@ -5,6 +5,13 @@
 
 ---
 
+## [Unreleased] — 2026-05-09 (五)
+
+### 修复
+- Electron 重启的冷启动窗口期 vite 代理拿到 ECONNREFUSED → 前端误报 "API 500"。新增 `src/lib/retry.ts::withColdStartRetry`，识别网络/5xx 类错误并退避重试（最多 5 次，最长 2.5s）。useAgents/useAgentFiles/TitleBar/GlobalShortcuts 的刷新链路全部接入
+
+---
+
 ## [Unreleased] — 2026-05-09 (四)
 
 ### 新增

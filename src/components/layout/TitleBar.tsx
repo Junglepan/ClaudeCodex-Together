@@ -3,6 +3,7 @@ import { RefreshCw, Settings, HelpCircle, PanelLeftClose, PanelLeftOpen } from '
 import { useAppStore } from '@/store'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
+import { withColdStartRetry } from '@/lib/retry'
 
 const isElectron =
   typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent)
@@ -20,10 +21,12 @@ export function TitleBar() {
     setRefreshing(true)
     setError(null)
     try {
-      const summaries = await api.agents.list(projectPath)
-      setAgentSummaries(summaries)
       const all = agentRegistry.getAll()
-      const lists = await Promise.all(all.map((a) => api.agents.files(a.id, projectPath)))
+      const [summaries, ...lists] = await withColdStartRetry(() => Promise.all([
+        api.agents.list(projectPath),
+        ...all.map((a) => api.agents.files(a.id, projectPath)),
+      ]))
+      setAgentSummaries(summaries)
       all.forEach((a, i) => setAgentFiles(a.id, lists[i]))
       pushToast({ kind: 'success', message: '已刷新' })
     } catch (e) {
