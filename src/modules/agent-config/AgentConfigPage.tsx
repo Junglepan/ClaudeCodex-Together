@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List } from 'lucide-react'
+import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List, GitMerge } from 'lucide-react'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import { useAgents, useAgentFiles } from '@/hooks/useAgents'
 import type { ApiConfigFile, ApiAgentSummary } from '@/core/api'
 import { FileDetail } from '../config-files/FileDetail'
 import { ClaudeRelTree } from './ClaudeRelTree'
+import { ResolvedConfigTab } from './ResolvedConfigTab'
 import { StatusBadge, ScopeBadge, FormatBadge } from '@/components/ui/Badges'
 import { EmptyState } from '@/components/ui/Skeleton'
 
@@ -19,7 +20,7 @@ interface Props {
   agentId: string
 }
 
-type Tab = 'overview' | 'files'
+type Tab = 'overview' | 'files' | 'resolved'
 
 export function AgentConfigPage({ agentId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -71,11 +72,15 @@ export function AgentConfigPage({ agentId }: Props) {
           icon={<LayoutGrid size={13} />} label="总览" />
         <TabBtn active={activeTab === 'files'} onClick={() => setActiveTab('files')}
           icon={<List size={13} />} label="配置明细" />
+        <TabBtn active={activeTab === 'resolved'} onClick={() => setActiveTab('resolved')}
+          icon={<GitMerge size={13} />} label="配置生效树" />
       </div>
 
       <div className="flex-1 overflow-hidden">
         {activeTab === 'overview' ? (
           <OverviewTab agentId={agentId} files={files} summary={summary} />
+        ) : activeTab === 'resolved' ? (
+          <ResolvedConfigTab agentId={agentId} />
         ) : (
           <FilesTab agentId={agentId} />
         )}

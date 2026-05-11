@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, files, sync, backup
+from api.routers import agents, files, sync, backup, config
 
 app = FastAPI(
     title="cc-steward Backend",
@@ -34,6 +34,7 @@ app.include_router(agents.router)
 app.include_router(files.router)
 app.include_router(sync.router)
 app.include_router(backup.router)
+app.include_router(config.router)
 
 
 # ── Core endpoints ───────────────────────────────────────────────────────────

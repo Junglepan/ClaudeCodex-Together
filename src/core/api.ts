@@ -96,6 +96,35 @@ export interface ApiSyncResult {
   errors?: string[]
 }
 
+export interface ResolvedSettingsRow {
+  key: string
+  value: string
+  source: 'global' | 'project' | 'local_override'
+  overrides: string[]
+}
+
+export interface ResolvedInstruction {
+  path: string
+  exists: boolean
+  order: number
+  scope: 'global' | 'project'
+}
+
+export interface ResolvedScopeItem {
+  name: string
+  source: 'global' | 'project'
+  overridden_by: 'project' | null
+}
+
+export interface ApiResolvedConfig {
+  agent: string
+  project: string | null
+  settings: ResolvedSettingsRow[]
+  instructions: ResolvedInstruction[]
+  skills: ResolvedScopeItem[]
+  agents: ResolvedScopeItem[]
+}
+
 export interface ApiMeta {
   project_path: string
   home_path: string
@@ -168,6 +197,13 @@ export const api = {
       request<ApiSyncResult>(
         '/sync/execute',
         { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath, replace }) },
+      ),
+  },
+
+  config: {
+    resolved: (agentId: string, projectPath?: string) =>
+      request<ApiResolvedConfig>(
+        `/config/resolved?agent=${agentId}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
       ),
   },
 }
