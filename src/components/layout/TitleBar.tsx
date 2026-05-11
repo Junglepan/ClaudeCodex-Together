@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Settings, HelpCircle, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { ProjectSelector } from '@/components/ui/ProjectSelector'
 import { useAppStore } from '@/store'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
@@ -72,6 +73,10 @@ export function TitleBar() {
       </div>
 
       <BackendIndicator />
+
+      <div className="ml-3">
+        <ProjectSelector />
+      </div>
 
       <div className="flex-1" />
 

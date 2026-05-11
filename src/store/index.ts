@@ -20,6 +20,11 @@ interface AppState {
   projectPath: string | undefined
   setProjectPath: (path: string) => void
 
+  // Recently used project paths (persisted)
+  recentProjects: string[]
+  addRecentProject: (path: string) => void
+  clearRecentProjects: () => void
+
   // Platform info (OS, hostname)
   platform: string | undefined
   setPlatform: (p: string) => void
@@ -64,7 +69,7 @@ interface AppState {
 }
 
 let toastSeq = 0
-const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed', 'theme']
+const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed', 'theme', 'recentProjects']
 
 function loadPersisted(): Partial<AppState> {
   if (typeof window === 'undefined') return {}
@@ -89,7 +94,22 @@ function persist(state: AppState) {
 
 export const useAppStore = create<AppState>((set, get) => ({
   projectPath: undefined,
-  setProjectPath: (path) => set({ projectPath: path }),
+  setProjectPath: (path) => {
+    set({ projectPath: path })
+    get().addRecentProject(path)
+  },
+
+  recentProjects: [],
+  addRecentProject: (path) => {
+    const current = get().recentProjects.filter((p) => p !== path)
+    const updated = [path, ...current].slice(0, 10)
+    set({ recentProjects: updated })
+    persist(get())
+  },
+  clearRecentProjects: () => {
+    set({ recentProjects: [] })
+    persist(get())
+  },
 
   platform: undefined,
   setPlatform: (platform) => set({ platform }),
