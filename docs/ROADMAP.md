@@ -611,6 +611,125 @@
 
 ---
 
+## 模块 K：Electron 桌面集成深化
+
+> 当前 Electron 集成已有基础（IPC bridge、preload、基本窗口管理），但缺少两个对 macOS 桌面应用体验至关重要的功能：原生菜单和文件变动监听。其余方向（托盘、右键菜单、状态恢复、自动更新）按价值分层，可按需执行。
+
+### K-1 原生应用菜单（高优先级，macOS 基本素养）
+
+- [ ] **K-1-1** 在 `electron/main.ts` 中使用 `Menu.buildFromTemplate` 注册应用菜单
+
+  **菜单结构：**
+  ```
+  文件
+    切换项目...          ⌘O   → 触发 J-3 项目选择器（发送 IPC 事件到 renderer）
+    导出当前配置...             → 调用 dialog.showSaveDialog，将选中文件内容写出
+    ──────
+    退出                 ⌘Q
+
+  编辑
+    撤销                 ⌘Z   → 标准 role: 'undo'（不需要自定义）
+    重做                 ⇧⌘Z  → role: 'redo'
+    ──────
+    剪切                 ⌘X   → role: 'cut'
+    复制                 ⌘C   → role: 'copy'
+    粘贴                 ⌘V   → role: 'paste'
+    全选                 ⌘A   → role: 'selectAll'
+    （注：不加编辑菜单，文本框右键菜单在 macOS 上不工作）
+
+  视图
+    刷新                 ⌘R   → webContents.reload()
+    切换深色模式         ⇧⌘D  → 发 IPC 事件 'app:toggle-theme' 到 renderer
+    折叠/展开侧栏        ⌘B   → 发 IPC 事件 'app:toggle-sidebar' 到 renderer
+    ──────
+    开发者工具           ⌥⌘I  → webContents.toggleDevTools()（仅 dev 模式）
+
+  帮助
+    快捷键参考                 → 打开 help 页面（发 IPC 事件 'app:navigate' to '/help'）
+    在 GitHub 查看             → shell.openExternal('https://github.com/...')
+    关于 cc-steward            → role: 'about'（macOS）
+  ```
+
+  - 编辑菜单使用内置 `role` 即可，Electron 自动处理，不需要自定义逻辑
+  - "切换项目"、"切换深色模式"、"折叠侧栏"、"导航到帮助页"等需要 renderer 响应的菜单项，通过 `mainWindow.webContents.send(event)` 推送；renderer 在 `electron-bridge.ts` 中监听对应事件并调用 store/router
+
+- [ ] **K-1-2** renderer 侧注册菜单 IPC 监听
+  - 在 `src/lib/electron-bridge.ts`（或 App.tsx 顶层）监听：
+    - `app:toggle-theme` → 调用 `useAppStore.getState().setTheme(...)`
+    - `app:toggle-sidebar` → 调用 `useAppStore.getState().setSidebarCollapsed(...)`
+    - `app:navigate` → 调用 React Router 的 `navigate(path)`
+  - 确保监听在组件 unmount 时正确移除（`ipcRenderer.removeListener`）
+
+### K-2 文件变动监听（高优先级，解决数据过期问题）
+
+> 用户在外部编辑配置文件（VS Code / vim）后，cc-steward 无感知，展示的是过期数据。
+
+- [ ] **K-2-1** 在 `electron/main.ts` 中维护 `fs.watch` 监听集合
+
+  **监听目标：**
+  - 始终监听：`~/.claude/`（递归）、`~/.codex/`（递归）
+  - 有选中项目时动态添加：`<projectPath>/.claude/`、`<projectPath>/CLAUDE.md`、`<projectPath>/AGENTS.md`
+
+  **实现要点：**
+  ```typescript
+  // 使用 chokidar（如已在依赖中）或原生 fs.watch
+  // 推荐 chokidar：稳定跨平台，支持递归，有防抖
+  import chokidar from 'chokidar'
+
+  let watcher: chokidar.FSWatcher | null = null
+
+  function startWatching(paths: string[]) {
+    watcher?.close()
+    watcher = chokidar.watch(paths, {
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 300 },  // 防抖：文件写完再通知
+    })
+    watcher.on('all', (event, filePath) => {
+      mainWindow?.webContents.send('fs:changed', { event, path: filePath })
+    })
+  }
+  ```
+
+  - 项目路径变更时（renderer 发送 `app:set-project`），主进程重新调用 `startWatching`
+  - 应用退出时 `watcher?.close()`
+
+- [ ] **K-2-2** renderer 侧响应 `fs:changed` 事件触发数据刷新
+  - 在 `src/lib/electron-bridge.ts` 暴露 `onFsChanged(callback)` 订阅函数
+  - 各数据 hook（`useAgentFiles`、`useAgentStatus`、`useProjects`）在 Electron 模式下注册此监听，收到事件后调用 `refetch()`
+  - 刷新时不重置页面状态（不清空选中的文件），静默后台刷新
+  - 对同一文件的高频变更做 300ms 防抖（由 chokidar `awaitWriteFinish` 处理，renderer 无需额外处理）
+
+- [ ] **K-2-3** 确认 `chokidar` 依赖
+  - 检查 `package.json` 中是否已有 `chokidar`（Vite/Electron 工具链常带此依赖）
+  - 若无则 `npm install chokidar`，确保其在 `dependencies`（非 devDependencies）中，以便打包进 Electron
+
+### K-3 原生右键菜单（中等优先级）
+
+- [ ] **K-3-1** 文件树节点右键弹出 contextMenu
+  - 在 renderer 通过 `ipcRenderer.invoke('context-menu:file', { path, exists })` 请求主进程弹出菜单
+  - 主进程用 `Menu.buildFromTemplate` + `menu.popup()` 弹出，菜单项：
+    - 在 Finder 中显示（`shell.showItemInFolder(path)`）
+    - 在终端打开（`shell.openPath(path)` 或 `open -a Terminal <dir>`）
+    - 复制路径（`clipboard.writeText(path)`）
+    - ──────
+    - 编辑（`ipcRenderer.send('navigate:file-detail', { path })`）
+    - 删除（弹确认对话框后调用现有 DELETE 接口）
+  - 非 Electron 模式下右键菜单不注册，FileDetail 面板的按钮保留作为降级方案
+
+### K-4 状态恢复（中等优先级）
+
+- [ ] **K-4-1** 将 `projectPath`（J-2-1）、`selectedAgentId`、`selectedFileKey` 纳入 Zustand persist
+  - 目前只有 `sidebarCollapsed` 和 `theme` 写了 localStorage
+  - 使用 Zustand `persist` middleware 的 `partialize` 选项，只持久化需要恢复的字段
+  - 重启后 `projectPath` 恢复 → 触发 K-2-1 的 `app:set-project` → 主进程重启文件监听
+
+### K-5 系统托盘（低优先级）
+
+- [ ] **K-5-1** 最小化到托盘，右键菜单提供：切换项目 / 触发同步 / 退出
+  - 实现条件：K-1 和 J 模块完成后，托盘菜单复用相同的 IPC 事件集
+
+---
+
 ## 执行顺序建议
 
 ```
@@ -630,6 +749,13 @@ I-1（Codex 错误修正）  + I-2（Codex 补充条目）
 
 J（项目路径选择）可独立并行，不依赖 A~I
   J-1（后端 /projects）→ J-2（Store）→ J-3（TitleBar UI）→ J-4（透传）+ J-5（Electron IPC）
+
+K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store）
+  K-1（原生菜单）独立可做
+  K-2（文件监听）→ 依赖 J-2 完成后（projectPath 可用）
+  K-3（右键菜单）独立可做，FileDetail 面板作降级方案
+  K-4（状态恢复）→ 依赖 J-2 完成后
+  K-5（托盘）→ 依赖 K-1 + J 完成后
 ```
 
 ---
