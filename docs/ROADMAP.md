@@ -132,6 +132,55 @@
 
 ---
 
+## 模块 I：Codex Agent 配置定义修正
+
+> 对应文件：`src/agents/codex.ts` + `backend/core/agents/codex.py`
+
+### I-1 错误修正（必须执行）
+
+- [ ] **I-1-1** 修正全局 AGENTS.md 路径
+  - 现状：`pathTemplate: '{home}/AGENTS.md'`
+  - 应改为：`pathTemplate: '{home}/.codex/AGENTS.md'`
+  - 同步更新后端 `codex.py` 对应条目
+
+- [ ] **I-1-2** 修正 agents 目录的格式描述
+  - 现状：`details` 中描述格式为 `.md`（从 Claude 照搬）
+  - 应改为：Codex agents 文件实际是 `.toml` 格式
+  - 同步更新 `global_agents` 和 `project_agents` 两个条目的 `details` 字段
+
+- [ ] **I-1-3** 重新定位 `~/.agents/skills/` 和 `{project}/.agents/skills/`
+  - 现状：作为 Codex 原生 skills 路径收录进 configFiles
+  - 实际：这是 cc-steward 设计的迁移中转路径，Codex 本身不原生读取此路径
+  - 应改为：从 Codex configFiles 中移除；在同步中心的迁移说明里作为"迁移目标路径"单独标注
+
+### I-2 补充缺失条目（高价值）
+
+- [ ] **I-2-1** 新增 `global_skills` — `~/.codex/skills/`（Codex 原生 skills）
+  - scope: global · kind: dir · format: dir
+  - Codex 原生 skill 体系的实际存储路径（区别于迁移中转路径 `~/.agents/skills/`）
+  - 本机有 doc、pdf、sora、codex-primary-runtime 等实际内容
+  - 无直接 counterpart（Claude skills 在 `~/.claude/skills/`，路径和加载机制不同）
+
+- [ ] **I-2-2** 新增 `global_memories` — `~/.codex/memories/`（记忆系统）
+  - scope: global · kind: dir · format: dir · 只读展示
+  - Codex 独有功能，Claude 无对应机制
+  - 需在 `config.toml` 中启用：`[features] memories = true`
+  - 目录内包含：`MEMORY.md`、`raw_memories.md`、`memory_summary.md`
+  - 展示时注明启用条件；未启用则显示"此功能未开启"
+
+- [ ] **I-2-3** 新增 `global_auth` — `~/.codex/auth.json`（认证文件）
+  - scope: global · kind: file · format: json · 只读（不提供编辑/删除）
+  - 等价于 Claude 的 `.claude.json`，存储 API key 和 token
+  - 详情页标注"由 Codex 自动管理，不建议手动编辑"
+
+### I-3 补充说明（中等价值，在现有条目详情里增加）
+
+- [ ] **I-3-1** `global_config`（config.toml）详情页补充 `[projects]` 字段说明
+  - `[projects."/path"]` 段定义每个项目的 `trust_level`，直接影响 Codex 在该项目下的行为权限
+  - 在 `details` 字段末尾追加说明，或在 FileDetail 的 settings 解析区块中单独展示
+
+---
+
 ## 模块 H：配置生效树 Tab（AgentConfigPage 第三个 Tab）
 
 > 新信息维度：展示各配置维度合并后的实际生效状态，回答"最终哪一层在生效、覆盖关系如何"。  
@@ -212,7 +261,8 @@
 ## 执行顺序建议
 
 ```
-A-1（补充条目）+ A-2（移除错误条目）
+A-1（Claude 补充条目）+ A-2（移除错误条目）
+I-1（Codex 错误修正）  + I-2（Codex 补充条目）
           ↓
     ┌─────┴──────┬──────────────┐
     F（后端同步）  C（关系树更新）  B（hooks 可视化）
@@ -221,7 +271,7 @@ A-1（补充条目）+ A-2（移除错误条目）
     ↓
     H-1（总览减负）+ H-3（生效树 Tab）
     ↓
-    D（概览改进）    E（同步规则）
+    D（概览改进）    E（同步规则）    I-3（config.toml 详情补充）
           ↓
       G（文档更新）
 ```
