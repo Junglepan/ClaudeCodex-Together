@@ -192,16 +192,106 @@
 
 ---
 
-## 模块 E：同步中心（Sync）规则更新
+## 模块 E：同步中心（Sync）体验重设计
 
-- [ ] **E-1** 同步优先级列表新增条目
-  - `global_instructions`（CLAUDE.md → AGENTS.md）加入迁移优先级
-  - `global_agents`（~/.claude/agents/ → ~/.codex/agents/）加入迁移优先级
-  - `global_commands` 标记为"无等价，不迁移"，说明原因
+> **问题背景**
+>
+> 后端逻辑已相当完整（扫描 → 转换 → 写入），但前端体验有三个结构性问题：
+> 1. **执行前信息不透明**：用户点"执行"前看不到实际会影响哪些文件；`/sync/plan` 接口已返回逐项数据，但前端只在执行后才展示结果
+> 2. **转换逻辑黑盒**：`converter.py` 做了清洗斜杠命令、工具名注释化、frontmatter 适配等有意义的转换，但前端 Notes 列只有一句结果，用户不知道改了什么、为什么标 check
+> 3. **状态语义模糊**：`Added / Check before using / Not Added` 三种状态含义不精确——"Not Added"可能是"目标已存在跳过"也可能是"Codex 不支持此类型"，两种情况含义完全不同
 
-- [ ] **E-2** 同步规划排除 `settings.local.json`
-  - 本地覆盖层包含个人敏感配置，明确不纳入同步范围
-  - 在同步报告中如有检测到则标注"已跳过（本地覆盖文件）"
+### E-1 扫描结果面板（执行前自动展示）
+
+- [ ] **E-1-1** 进入同步页面即自动触发 `GET /sync/plan`（dry run），无需用户手动点击"预演"
+  - 扫描是只读操作，应主动呈现，不应藏在按钮后面
+  - 加载时展示骨架屏，失败时展示"后端未运行"提示
+
+- [ ] **E-1-2** 扫描结果面板逐项展示，每行包含：
+  ```
+  [类型徽章]  名称           源路径 → 目标路径        [状态标签]   [展开▾]
+  skill       migrate-to-codex  ~/.claude/skills/...  →  ~/.codex/skills/...   待同步
+  skill       review            ~/.claude/skills/...  →  ~/.codex/skills/...   已同步（跳过）
+  agent       architect         ~/.claude/agents/...  →  ~/.codex/agents/...   有冲突
+  instruction CLAUDE.md         ~/.claude/CLAUDE.md   →  ~/.codex/AGENTS.md   待同步
+  hook        Stop              settings.json:hooks   →  ─                     不可迁移
+  ```
+  - 类型徽章：`skill` / `agent` / `instruction` / `hook` / `command`
+  - 状态标签取值（替换原有 Added / Check / Not Added）：
+    - `待同步`（绿色）：目标不存在，可以写入
+    - `已同步`（灰色）：目标已存在且内容一致，本次会跳过
+    - `有冲突`（橙色）：目标已存在但内容不同，默认跳过，覆盖模式下会覆盖
+    - `需人工检查`（黄色）：converter 检测到工具名引用等无法自动处理的内容，写入后需用户确认
+    - `不可迁移`（灰色）：Codex 不支持此类型（如 Stop Hook），不会写入
+
+- [ ] **E-1-3** 每行可展开"转换说明"抽屉
+  - 展示 converter 的实际操作：
+    ```
+    ✂ 已删除 2 行（Claude 专属斜杠命令）：
+        /compact → 已删除
+        /clear   → 已删除
+
+    🔧 工具列表已转为注释（Codex 不使用此字段）：
+        # tools: Read, Write, Bash
+
+    ⚠ 检测到工具名引用（需人工确认）：
+        第 12 行: "使用 Bash 工具执行..."
+    ```
+  - 状态为"不可迁移"的行展开后说明原因："Codex 不支持 Stop 事件，hooks 无法迁移"
+  - 无转换操作的项（内容直接复制）展开后显示"内容直接复制，无需转换"
+
+### E-2 操作区重构
+
+- [ ] **E-2-1** 范围选择保留（全部 / 仅全局 / 仅当前项目），与 J 模块 `projectPath` 联动
+  - 当 `projectPath` 为 null 时，"仅当前项目"选项置灰并提示"请先选择项目"
+
+- [ ] **E-2-2** 新增"覆盖模式"开关（默认关闭）
+  - 关闭时：`有冲突` 状态的文件跳过
+  - 开启时：`有冲突` 状态的文件强制覆盖（原文件自动备份为 `.bak.<ts>`）
+  - 开启后在扫描面板中将`有冲突`项的标签更新为`将覆盖`（橙色加粗），提升感知
+
+- [ ] **E-2-3** 执行按钮状态
+  - 扫描中：禁用，显示"扫描中..."
+  - 扫描完成无可同步项：禁用，显示"无需同步"
+  - 有待同步或待覆盖项：启用，显示"执行同步（N 项）"
+
+### E-3 执行报告重构
+
+- [ ] **E-3-1** 执行后结果按状态分组展示
+  - 分组：`已写入（N）` / `已跳过（N）` / `失败（N）`（失败组折叠默认展开）
+  - 移除原有英文状态列，改为中文状态徽章
+
+- [ ] **E-3-2** 每项可展开查看转换前后 diff
+  - 对于写入成功的文件，展开后展示"原始内容（来自 Claude 侧）" vs "写入内容（转换后）"的简化 diff
+  - diff 格式：红色删除行 / 绿色新增行（仅展示变更行 ±3 行上下文，不展示全文）
+  - 覆盖写入的文件额外展示备份路径：`已备份至 ~/.codex/agents/architect.md.bak.20260511T143200`
+
+### E-4 后端配合改动（minor）
+
+- [ ] **E-4-1** `/sync/plan` 响应中补充 `diff_summary` 字段
+  - 现有 plan 接口已返回 `status` 和 `notes`，需补充：
+    ```json
+    {
+      "item": "skill/review",
+      "status": "conflict",
+      "notes": "...",
+      "diff_summary": {
+        "removed_lines": ["/compact", "/clear"],
+        "tool_comments": ["Read", "Write", "Bash"],
+        "check_lines": [{"line": 12, "reason": "tool name reference"}]
+      }
+    }
+    ```
+  - 前端用 `diff_summary` 填充 E-1-3 的展开抽屉内容
+
+- [ ] **E-4-2** 新增 `settings.local.json` 排除规则
+  - 本地覆盖层含个人敏感配置，明确不纳入同步范围
+  - 在 plan 响应中如检测到此类文件，状态设为 `不可迁移`，notes 说明"本地覆盖文件不参与同步"
+
+- [ ] **E-4-3** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
+  - `global_instructions`（CLAUDE.md → AGENTS.md）：加入迁移优先级，走 instruction converter
+  - `global_agents`（~/.claude/agents/ → ~/.codex/agents/）：加入迁移优先级，走 agent converter
+  - `global_commands`（~/.claude/commands/）：状态固定为 `不可迁移`，notes 说明"Codex 无等价斜杠命令机制"
 
 ---
 
