@@ -117,6 +117,10 @@ export function ProjectSelector() {
     .filter((p) => p !== projectPath && !discoveredPaths.has(p))
     .slice(0, 5)
   const discoveredNotCurrent = discovered.filter((d) => d.path !== projectPath)
+  const hasEmptyFirstRun = !loadingDiscover && discoveredNotCurrent.length === 0 && recentNotDiscovered.length === 0
+  const latestDiscoveredPath = discovered
+    .filter((p) => p.last_used !== null)
+    .sort((a, b) => (b.last_used ?? 0) - (a.last_used ?? 0))[0]?.path
 
   return (
     <div className="relative no-drag" ref={ref}>
@@ -150,9 +154,10 @@ export function ProjectSelector() {
               {loadingDiscover && <Loader2 size={10} className="animate-spin text-text-tertiary" />}
             </div>
 
-            {!loadingDiscover && discoveredNotCurrent.length === 0 && (
-              <div className="px-3 py-2 text-2xs text-text-tertiary">
-                未发现项目（来自 ~/.codex/config.toml 和 ~/.claude/projects/）
+            {hasEmptyFirstRun && (
+              <div className="px-3 py-3 text-2xs text-text-tertiary leading-relaxed">
+                <div className="font-medium text-text-secondary mb-1">未自动发现项目</div>
+                <div>请点击“{isElectron ? '选择文件夹' : '输入路径'}”指定项目目录，或确保已使用过 Claude Code / Codex CLI。</div>
               </div>
             )}
 
@@ -172,6 +177,9 @@ export function ProjectSelector() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium truncate">{proj.name}</span>
                     {!proj.exists && <span className="text-2xs text-text-tertiary">(已删除)</span>}
+                    {proj.path === latestDiscoveredPath && (
+                      <span className="text-2xs text-accent-blue bg-accent-blue/10 px-1.5 py-0.5 rounded">上次使用</span>
+                    )}
                   </div>
                   <code className="text-2xs font-mono text-text-tertiary truncate block">{proj.path}</code>
                 </div>

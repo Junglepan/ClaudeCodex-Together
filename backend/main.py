@@ -58,10 +58,8 @@ def meta():
     }.get(system, system)
 
     # CC_STEWARD_PROJECT env var lets callers specify the project root explicitly.
-    # Legacy CCT_PROJECT still accepted. Falls back to the user's home directory.
+    # Legacy CCT_PROJECT still accepted. Without either, no project is selected.
     project_path = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
-    if not project_path:
-        project_path = str(Path.home())
 
     return {
         "project_path": project_path,

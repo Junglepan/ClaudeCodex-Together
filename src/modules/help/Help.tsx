@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowRight, ChevronRight } from 'lucide-react'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import { SHORTCUTS } from '@/lib/shortcut-catalog'
+import { ClaudeRelTree } from '@/modules/agent-config/ClaudeRelTree'
 
 const HOOK_EVENT_MAP = [
   { claude: 'SessionStart',  codex: null,             note: '无 Codex 等价物，Codex 没有 session 启动钩子' },
@@ -22,6 +23,7 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: 'overview',     label: '工具定位' },
   { id: 'environment',  label: '当前环境' },
   { id: 'layers',       label: '配置层次' },
+  { id: 'config-mechanism', label: '配置机制' },
   { id: 'hooks',        label: 'Hook 事件对照' },
   { id: 'sync',         label: '同步范围' },
   { id: 'agents',       label: '已注册的 Agent' },
@@ -32,6 +34,7 @@ const SECTIONS: { id: string; label: string }[] = [
 export function Help() {
   const [active, setActive] = useState<string>('overview')
   const containerRef = useRef<HTMLDivElement>(null)
+  const location = useLocation()
 
   // Observe section visibility for active TOC item
   useEffect(() => {
@@ -62,6 +65,12 @@ export function Help() {
       setActive(id)
     }
   }
+
+  useEffect(() => {
+    const id = location.hash.replace(/^#/, '')
+    if (!id) return
+    window.setTimeout(() => scrollTo(id), 0)
+  }, [location.hash])
 
   return (
     <div className="flex flex-1 overflow-hidden animate-fade-in">
@@ -138,6 +147,12 @@ export function Help() {
                   </ul>
                 </div>
               ))}
+            </div>
+          </Section>
+
+          <Section id="config-mechanism" title="Claude Code 配置关系与优先级">
+            <div className="bg-surface-card border border-border-default rounded-xl p-4">
+              <ClaudeRelTree />
             </div>
           </Section>
 

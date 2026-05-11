@@ -5,7 +5,6 @@ import { useAppStore } from '@/store'
 import { useAgents, useAgentFiles } from '@/hooks/useAgents'
 import type { ApiConfigFile, ApiAgentSummary } from '@/core/api'
 import { FileDetail } from '../config-files/FileDetail'
-import { ClaudeRelTree } from './ClaudeRelTree'
 import { ResolvedConfigTab } from './ResolvedConfigTab'
 import { StatusBadge, ScopeBadge, FormatBadge } from '@/components/ui/Badges'
 import { EmptyState } from '@/components/ui/Skeleton'
@@ -161,18 +160,6 @@ function OverviewTab({
           ))}
         </div>
       </div>
-
-      {agentId === 'claude' && (
-        <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-border-subtle">
-            <h2 className="text-sm font-medium text-text-primary">配置关系与优先级</h2>
-            <p className="text-2xs text-text-tertiary mt-0.5">Claude Code 配置文件的加载顺序、合并策略与作用域</p>
-          </div>
-          <div className="p-4">
-            <ClaudeRelTree />
-          </div>
-        </div>
-      )}
 
       {agentId === 'codex' && (
         <div className="bg-surface-card border border-border-default rounded-xl p-4">

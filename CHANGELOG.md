@@ -5,6 +5,21 @@
 
 ---
 
+## [Unreleased] — 2026-05-11
+
+### 修复
+- 配置生效树：指令加载文案改为“全部拼接注入”，避免误导为覆盖关系。
+- Codex resolved agents 扫描改为读取 `.toml` 文件，并在缺少 `tomllib/tomli` 时优雅降级。
+- Claude resolved settings 对 `hooks` / `permissions` 使用多层追加合并，标记为“多层合并”。
+- `/meta` 无项目环境变量时不再把 home 目录误设为当前项目。
+- `/projects` 增加 `last_used` 并按最近使用排序；同路径 Claude/Codex 来源合并为 `both` 时保留最新时间。
+
+### 改进
+- ProjectSelector 首次无自动发现项目时显示引导文案，并为最近使用的发现项目标注“上次使用”。
+- Help 新增“Claude Code 配置关系与优先级”章节；Agent 总览页移除静态关系树，配置生效树增加跳转入口。
+
+---
+
 ## [Unreleased] — 2026-05-10
 
 ### 新增

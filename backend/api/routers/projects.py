@@ -69,12 +69,18 @@ def _discover_from_codex(home: Path) -> list[dict]:
     config_path = home / ".codex" / "config.toml"
     if not config_path.exists():
         return []
+    data = None
     try:
-        import tomllib
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib
         with open(config_path, "rb") as f:
             data = tomllib.load(f)
     except Exception:
-        return []
+        text = config_path.read_text(encoding="utf-8", errors="ignore")
+        project_paths = re.findall(r'^\[projects\."([^"]+)"\]', text, flags=re.MULTILINE)
+        data = {"projects": {path: {} for path in project_paths}}
 
     projects_table = data.get("projects", {})
     results = []
@@ -85,6 +91,7 @@ def _discover_from_codex(home: Path) -> list[dict]:
             "name": p.name or str(p),
             "exists": p.is_dir(),
             "source": "codex",
+            "last_used": None,
         })
     return results
 
@@ -108,6 +115,7 @@ def _discover_from_claude(home: Path) -> list[dict]:
                 "name": p.name or decoded,
                 "exists": p.is_dir(),
                 "source": "claude",
+                "last_used": entry.stat().st_mtime,
             })
         # Skip entries we couldn't decode (deleted projects with ambiguous names)
     return results
@@ -130,11 +138,22 @@ def _merge(codex_list: list[dict], claude_list: list[dict]) -> list[dict]:
             existing = seen[key]
             if existing["source"] != item["source"]:
                 existing["source"] = "both"
+            existing_last = existing.get("last_used")
+            item_last = item.get("last_used")
+            if existing_last is None or (item_last is not None and item_last > existing_last):
+                existing["last_used"] = item_last
         else:
             seen[key] = dict(item)
 
-    # Sort: existing dirs first, then alphabetical by name
-    return sorted(seen.values(), key=lambda x: (not x["exists"], x["name"].lower()))
+    # Sort: existing dirs first, recent known usage next, then alphabetical.
+    return sorted(
+        seen.values(),
+        key=lambda x: (
+            not x["exists"],
+            -(x.get("last_used") or -1),
+            x["name"].lower(),
+        ),
+    )
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -143,7 +162,7 @@ def _merge(codex_list: list[dict], claude_list: list[dict]) -> list[dict]:
 def list_projects():
     """
     Returns discovered projects from ~/.codex/config.toml and ~/.claude/projects/.
-    Each item: { path, name, exists, source }.
+    Each item: { path, name, exists, source, last_used }.
     """
     home = Path.home()
     codex = _discover_from_codex(home)

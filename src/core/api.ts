@@ -99,7 +99,7 @@ export interface ApiSyncResult {
 export interface ResolvedSettingsRow {
   key: string
   value: string
-  source: 'global' | 'project' | 'local_override'
+  source: 'global' | 'project' | 'local_override' | 'merged'
   overrides: string[]
 }
 
@@ -126,7 +126,7 @@ export interface ApiResolvedConfig {
 }
 
 export interface ApiMeta {
-  project_path: string
+  project_path: string | null
   home_path: string
   platform: string
   hostname: string
@@ -217,4 +217,5 @@ export interface ApiProject {
   name: string
   exists: boolean
   source: 'claude' | 'codex' | 'both'
+  last_used: number | null
 }

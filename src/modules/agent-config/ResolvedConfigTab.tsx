@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, ArrowRight, ExternalLink } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/core/api'
 import type { ApiResolvedConfig, ResolvedSettingsRow, ResolvedInstruction, ResolvedScopeItem } from '@/core/api'
 import { useAppStore } from '@/store'
@@ -10,6 +11,7 @@ interface Props {
 
 export function ResolvedConfigTab({ agentId }: Props) {
   const { projectPath } = useAppStore()
+  const navigate = useNavigate()
   const [config, setConfig] = useState<ApiResolvedConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,14 +45,23 @@ export function ResolvedConfigTab({ agentId }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-text-primary">配置生效树</h2>
           <p className="text-2xs text-text-tertiary mt-0.5">
-            当前实际生效的配置合并结果，按优先级从低到高展示覆盖关系
+            当前实际生效的配置合并结果：settings 字段后者覆盖前者，指令文件全部拼接
           </p>
         </div>
-        {config.project && (
-          <code className="text-2xs font-mono text-text-tertiary bg-surface-base px-2 py-1 rounded border border-border-default truncate max-w-xs">
-            {config.project}
-          </code>
-        )}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => navigate('/help#config-mechanism')}
+            className="flex items-center gap-1 text-2xs text-accent-blue hover:text-accent-blue/80 transition-colors flex-shrink-0"
+          >
+            查看配置合并原理
+            <ExternalLink size={11} />
+          </button>
+          {config.project && (
+            <code className="text-2xs font-mono text-text-tertiary bg-surface-base px-2 py-1 rounded border border-border-default truncate max-w-xs">
+              {config.project}
+            </code>
+          )}
+        </div>
       </div>
 
       <SettingsSection rows={config.settings} />
@@ -99,11 +110,11 @@ function SettingsSection({ rows }: { rows: ResolvedSettingsRow[] }) {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {row.overrides.map((src) => (
                         <span key={src} className="flex items-center gap-1">
-                          <SourceBadge source={src as 'global' | 'project' | 'local_override'} dim />
+                          <SourceBadge source={src as 'global' | 'project' | 'local_override' | 'merged'} dim />
                           <ArrowRight size={10} className="text-text-tertiary" />
                         </span>
                       ))}
-                      <SourceBadge source={row.source as 'global' | 'project' | 'local_override'} />
+                      <SourceBadge source={row.source as 'global' | 'project' | 'local_override' | 'merged'} />
                     </div>
                   </td>
                 </tr>
@@ -127,7 +138,7 @@ function InstructionsSection({ instructions }: { instructions: ResolvedInstructi
       badge={instructions.filter((i) => i.exists).length}
       open={open}
       onToggle={() => setOpen((p) => !p)}
-      hint="Markdown 指令文件按优先级依次注入，后者可覆盖前者"
+      hint="所有层级全部拼接注入，全局与项目指令同时生效，不存在覆盖"
     >
       <div className="divide-y divide-border-subtle">
         {instructions.map((inst) => (
@@ -234,13 +245,14 @@ function SourceBadge({
   source,
   dim = false,
 }: {
-  source: 'global' | 'project' | 'local_override'
+  source: 'global' | 'project' | 'local_override' | 'merged'
   dim?: boolean
 }) {
   const map = {
     global: { label: '全局', cls: 'bg-accent-blue/10 text-accent-blue' },
     project: { label: '项目', cls: 'bg-accent-green/10 text-accent-green' },
     local_override: { label: '本地覆盖', cls: 'bg-accent-orange/10 text-accent-orange' },
+    merged: { label: '多层合并', cls: 'bg-purple-100 text-purple-700' },
   }
   const { label, cls } = map[source] ?? { label: source, cls: 'bg-surface-base text-text-tertiary' }
   return (

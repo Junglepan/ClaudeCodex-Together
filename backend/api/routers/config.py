@@ -56,21 +56,36 @@ def _resolve_claude(home: Path, project: Optional[Path]):
     project_settings_path = (project / ".claude" / "settings.json") if project else None
     local_settings_path   = (project / ".claude" / "settings.local.json") if project else None
 
-    # Merge settings: global → project → local (last wins per key)
+    # Merge settings: scalar keys are last-wins; list-like keys append by layer.
     global_data  = _read_json_safe(global_settings_path)  if global_settings_path.exists()  else {}
     project_data = _read_json_safe(project_settings_path) if project_settings_path and project_settings_path.exists() else {}
     local_data   = _read_json_safe(local_settings_path)   if local_settings_path   and local_settings_path.exists()   else {}
 
+    array_merge_keys = {"hooks", "permissions"}
+    layers = [
+        ("global", global_data),
+        ("project", project_data),
+        ("local_override", local_data),
+    ]
     settings_rows = []
     all_keys = set(global_data) | set(project_data) | set(local_data)
     for key in sorted(all_keys):
-        sources = []
-        value   = None
-        if key in global_data:  sources.append("global");        value = global_data[key]
-        if key in project_data: sources.append("project");       value = project_data[key]
-        if key in local_data:   sources.append("local_override"); value = local_data[key]
-        top_source = sources[-1] if sources else "global"
-        overrides  = sources[:-1] if len(sources) > 1 else []
+        layers_with_key = [(src, data[key]) for src, data in layers if key in data]
+        if key in array_merge_keys:
+            merged = []
+            for _, value in layers_with_key:
+                if isinstance(value, list):
+                    merged.extend(value)
+                else:
+                    merged.append(value)
+            top_source = "merged" if len(layers_with_key) > 1 else layers_with_key[0][0]
+            overrides = []
+            value = merged
+        else:
+            sources = [src for src, _ in layers_with_key]
+            value = layers_with_key[-1][1]
+            top_source = sources[-1]
+            overrides = sources[:-1] if len(sources) > 1 else []
         val_str = json.dumps(value, ensure_ascii=False)
         if len(val_str) > 80:
             val_str = val_str[:77] + "…"
@@ -134,10 +149,16 @@ def _resolve_claude(home: Path, project: Optional[Path]):
 # ── Codex resolver ─────────────────────────────────────────────────────────────
 
 def _resolve_codex(home: Path, project: Optional[Path]):
-    import tomllib  # Python 3.11+
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        try:
+            import tomli as tomllib
+        except ModuleNotFoundError:
+            tomllib = None
 
     def read_toml(path: Path) -> dict:
-        if not path.exists():
+        if tomllib is None or not path.exists():
             return {}
         try:
             with open(path, "rb") as f:
@@ -203,8 +224,8 @@ def _resolve_codex(home: Path, project: Optional[Path]):
     # Agents
     global_agents_dir  = home / ".codex" / "agents"
     project_agents_dir = (project / ".codex" / "agents") if project else None
-    global_agent_names  = {p[:-3] for p in _dir_entries(global_agents_dir) if p.endswith(".md")}
-    project_agent_names = {p[:-3] for p in _dir_entries(project_agents_dir) if p.endswith(".md")} if project_agents_dir else set()
+    global_agent_names  = {p[:-5] for p in _dir_entries(global_agents_dir) if p.endswith(".toml")}
+    project_agent_names = {p[:-5] for p in _dir_entries(project_agents_dir) if p.endswith(".toml")} if project_agents_dir else set()
     agents_list = []
     for name in sorted(global_agent_names):
         agents_list.append({"name": name, "source": "global", "overridden_by": "project" if name in project_agent_names else None})

@@ -775,13 +775,13 @@ K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store
 
 **根因**：CLAUDE.md / AGENTS.md 的实际行为是所有层级**全部拼接注入**上下文，不存在"后者覆盖前者"的关系。当前两处文字描述均有误导。
 
-- [ ] **Q-1-1** 修正 `InstructionsSection` 的 `hint` 文字（第 130 行）
+- [x] **Q-1-1** 修正 `InstructionsSection` 的 `hint` 文字（第 130 行）
   ```
   旧：hint="Markdown 指令文件按优先级依次注入，后者可覆盖前者"
   新：hint="所有层级全部拼接注入，全局与项目指令同时生效，不存在覆盖"
   ```
 
-- [ ] **Q-1-2** 修正页面顶部描述（第 46 行）
+- [x] **Q-1-2** 修正页面顶部描述（第 46 行）
   ```
   旧："当前实际生效的配置合并结果，按优先级从低到高展示覆盖关系"
   新："当前实际生效的配置合并结果：settings 字段后者覆盖前者，指令文件全部拼接"
@@ -795,7 +795,7 @@ K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store
 
 **根因**：`_resolve_codex` 函数扫描 `~/.codex/agents/` 时用 `.endswith(".md")` 过滤，但 Codex agent 文件格式为 `.toml`，导致发现结果永远为空。
 
-- [ ] **Q-2-1** 修正 `_resolve_codex` 中 agents 目录的扫描后缀（第 206-207 行）
+- [x] **Q-2-1** 修正 `_resolve_codex` 中 agents 目录的扫描后缀（第 206-207 行）
   ```python
   # 旧（错误）
   global_agent_names  = {p[:-3] for p in _dir_entries(global_agents_dir)  if p.endswith(".md")}
@@ -816,6 +816,8 @@ K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store
 **根因**：当前 `_resolve_claude` 对所有 key 统一使用 last-wins 覆盖。官方规范中 `hooks`、`permissions` 字段是**各层追加合并**（全局 hooks 列表 + 项目 hooks 列表 = 最终列表），标量字段才是后者覆盖前者。
 
 #### Q-3-1 后端：按字段类型分支处理
+
+- [x] 已实现：`hooks` / `permissions` 按层追加，来源显示为 `merged`。
 
 修改 `_resolve_claude` 的 settings 合并逻辑：
 
@@ -862,6 +864,8 @@ for key in sorted(all_keys):
 
 #### Q-3-2 前端类型：`source` 补充 `'merged'`
 
+- [x] 已实现：`ResolvedSettingsRow.source` 支持 `merged`。
+
 修改 `src/core/api.ts` 中 `ResolvedSettingsRow`：
 
 ```typescript
@@ -873,6 +877,8 @@ source: 'global' | 'project' | 'local_override' | 'merged'
 ```
 
 #### Q-3-3 前端 UI：`SourceBadge` 加 `merged` 分支
+
+- [x] 已实现：`SourceBadge` 展示“多层合并”。
 
 修改 `src/modules/agent-config/ResolvedConfigTab.tsx` 中 `SourceBadge`：
 
@@ -922,7 +928,7 @@ model         "claude-opus-4-5"            [项目] → 全局
 
 **根因**：当前无 env var 时 `/meta` 回退到 `Path.home()`，前端将 home 目录设为 `projectPath`，ProjectSelector 显示错误的"当前项目"。
 
-- [ ] **P-1-1** `/meta` 无 env var 时 `project_path` 返回 `null`（或不含该字段）
+- [x] **P-1-1** `/meta` 无 env var 时 `project_path` 返回 `null`（或不含该字段）
   ```python
   # 旧
   if not project_path:
@@ -932,7 +938,7 @@ model         "claude-opus-4-5"            [项目] → 全局
   # project_path 保持 None，返回体中不含该字段或值为 null
   ```
 
-- [ ] **P-1-2** 前端 `App.tsx` 已有 `if (d.project_path) setProjectPath(d.project_path)` 条件判断，无需改动；确认 `projectPath` 初始值为 `undefined` 时 ProjectSelector 显示"未选择项目"。
+- [x] **P-1-2** 前端 `App.tsx` 已有 `if (d.project_path) setProjectPath(d.project_path)` 条件判断，无需改动；确认 `projectPath` 初始值为 `undefined` 时 ProjectSelector 显示"未选择项目"。
 
 ---
 
@@ -942,16 +948,16 @@ model         "claude-opus-4-5"            [项目] → 全局
 
 **根因**：当前 `/projects` 返回列表只按 `exists`、`name` 排序，用户最近使用的项目不一定排在最前。
 
-- [ ] **P-2-1** Claude 侧：取 `~/.claude/projects/<dir>` 的 `mtime` 作为 `last_used`
+- [x] **P-2-1** Claude 侧：取 `~/.claude/projects/<dir>` 的 `mtime` 作为 `last_used`
   ```python
   last_used = entry.stat().st_mtime  # Unix timestamp
   ```
 
-- [ ] **P-2-2** Codex 侧：暂设 `last_used = None`（config.toml 不记录访问时间）
+- [x] **P-2-2** Codex 侧：暂设 `last_used = None`（config.toml 不记录访问时间）
 
-- [ ] **P-2-3** 合并结果按 `last_used` 降序排列，`None` 排末尾；同路径 claude+codex 取较大值
+- [x] **P-2-3** 合并结果按 `last_used` 降序排列，`None` 排末尾；同路径 claude+codex 取较大值
 
-- [ ] **P-2-4** 响应结构加 `last_used` 字段，前端 `ApiProject` 接口同步更新
+- [x] **P-2-4** 响应结构加 `last_used` 字段，前端 `ApiProject` 接口同步更新
   ```typescript
   export interface ApiProject {
     path: string
@@ -970,14 +976,14 @@ model         "claude-opus-4-5"            [项目] → 全局
 
 **根因**：首次使用时 `discovered` 为空（后端暂未发现任何项目），下拉面板只有"选择文件夹"按钮，无任何引导。
 
-- [ ] **P-3-1** 无发现结果且无 recents 时，显示引导文案
+- [x] **P-3-1** 无发现结果且无 recents 时，显示引导文案
   ```
   未自动发现项目
   请点击"选择文件夹"指定项目目录，
   或确保已使用过 Claude Code / Codex CLI。
   ```
 
-- [ ] **P-3-2** 有发现结果时，`last_used` 最近的项目加"上次使用"标签（非自动切换，只是视觉提示）
+- [x] **P-3-2** 有发现结果时，`last_used` 最近的项目加"上次使用"标签（非自动切换，只是视觉提示）
   ```
   已识别项目
   ● my-project    [Claude+Codex]  上次使用 ←
@@ -990,15 +996,15 @@ model         "claude-opus-4-5"            [项目] → 全局
 
 > 当前状态：ClaudeRelTree 仍在 AgentConfigPage OverviewTab（第 172 行），总览 Tab 混合了状态数据与静态知识。
 
-- [ ] **H-1-1** 帮助页新增"配置机制"章节
+- [x] **H-1-1** 帮助页新增"配置机制"章节
   - 在 `src/modules/help/Help.tsx` 现有章节后增加 section，标题"Claude Code 配置关系与优先级"
   - 直接渲染 `<ClaudeRelTree />`，或将其内容展开为帮助页风格静态说明块
 
-- [ ] **H-1-2** AgentConfigPage OverviewTab 移除 ClaudeRelTree
+- [x] **H-1-2** AgentConfigPage OverviewTab 移除 ClaudeRelTree
   - 删除 `agentId === 'claude'` 下的 ClaudeRelTree 整个卡片（约 12 行）
   - OverviewTab 回归纯状态快照：统计卡片 + 文件状态列表
 
-- [ ] **H-1-3** ResolvedConfigTab 顶部加静态知识入口
+- [x] **H-1-3** ResolvedConfigTab 顶部加静态知识入口
   - 在页面右上角加 `查看配置合并原理 →` 链接，`navigate('/help')` 并带锚点 `#config-mechanism`
 
 ---
