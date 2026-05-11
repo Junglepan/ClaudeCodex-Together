@@ -132,6 +132,75 @@
 
 ---
 
+## 模块 H：配置生效树 Tab（AgentConfigPage 第三个 Tab）
+
+> 新信息维度：展示各配置维度合并后的实际生效状态，回答"最终哪一层在生效、覆盖关系如何"。  
+> 依赖 A-1、F-1、F-2 完成后执行。
+
+### H-1 总览 Tab 减负
+
+- [ ] **H-1-1** 将 `ClaudeRelTree`（静态配置关系知识）从总览 Tab 移除
+  - 移入帮助页，新增"配置机制"章节，嵌入完整关系树
+  - 总览 Tab 保留：Agent 状态卡片 + 文件状态列表 + 配置对照表，成为纯粹的"状态快照"
+
+- [ ] **H-1-2** 配置生效树 Tab 顶部放静态知识入口
+  - 添加"查看配置合并原理 →"链接，跳转到帮助页对应锚点
+  - 静态知识与动态状态彻底分离，但保留导航路径
+
+### H-2 后端新增 resolved 接口
+
+- [ ] **H-2-1** 新增 `GET /config/resolved?agent=claude&project=...`
+  - 返回各配置维度的合并态，结构如下：
+    ```json
+    {
+      "settings": [
+        { "key": "model", "value": "...", "source": "project", "overrides": "global" },
+        { "key": "hooks", "value": [...], "source": "merged", "layers": ["global", "project"] }
+      ],
+      "instructions": [
+        { "path": "~/.claude/CLAUDE.md", "exists": true, "order": 1 },
+        { "path": "./CLAUDE.md", "exists": true, "order": 2 }
+      ],
+      "skills": [
+        { "name": "migrate-to-codex", "source": "global", "overridden_by": null },
+        { "name": "review", "source": "global", "overridden_by": "project" }
+      ],
+      "agents": [
+        { "name": "architect", "source": "global", "overridden_by": null }
+      ]
+    }
+    ```
+  - settings 第一版只展示顶层 key，不展开嵌套对象（控制复杂度）
+  - hooks/permissions 等数组字段标注为"多层合并追加"，不拆解每个元素的来源
+
+### H-3 前端：配置生效树 Tab 组件
+
+- [ ] **H-3-1** `AgentConfigPage` 新增第三个 Tab：`配置生效树`
+  - Tab 顺序：总览 / 配置明细 / **配置生效树**
+
+- [ ] **H-3-2** `ResolvedConfigTab` 组件，包含四个子区块：
+
+  **settings.json 合并结果**
+  - 每行：字段名 + 当前值（截断显示）+ 来源层徽章（全局 / 项目 / 本地覆盖）+ 是否覆盖上层
+  - 第一版只展示顶层 key
+
+  **CLAUDE.md 拼接顺序**
+  - 每行：序号 + 文件路径 + exists 状态（✓ / ○）
+  - 不展示文件内容，只展示加载结构
+
+  **Skills 覆盖关系**
+  - 每行：skill 名称 + 来源（全局 / 项目）+ 是否被项目同名覆盖
+  - 被覆盖的全局 skill 用删除线或灰色标注
+
+  **Agents 覆盖关系**
+  - 与 Skills 展示形式相同
+
+- [ ] **H-3-3** 加载态与空态处理
+  - 加载中：骨架屏占位
+  - 后端未运行（mock 模式）：展示提示"需要连接本地后端才能计算合并结果"，不展示假数据
+
+---
+
 ## 模块 G：DESIGN.md 文档同步更新
 
 - [ ] **G-1** 更新 Claude 配置关系树章节，补充新增文件
@@ -143,15 +212,18 @@
 ## 执行顺序建议
 
 ```
-A-1（补充条目）
-  ↓
-A-2（移除错误条目）
-  ↓
-B（hooks 可视化）    C（关系树更新）    F（后端同步）
-        ↓                  ↓                 ↓
-              D（概览改进）    E（同步规则）
-                        ↓
-                    G（文档更新）
+A-1（补充条目）+ A-2（移除错误条目）
+          ↓
+    ┌─────┴──────┬──────────────┐
+    F（后端同步）  C（关系树更新）  B（hooks 可视化）
+    ↓             ↓
+    H-2（resolved 接口）
+    ↓
+    H-1（总览减负）+ H-3（生效树 Tab）
+    ↓
+    D（概览改进）    E（同步规则）
+          ↓
+      G（文档更新）
 ```
 
 ---
