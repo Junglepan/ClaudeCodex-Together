@@ -11,6 +11,7 @@ import { useShortcuts } from '@/hooks/useShortcuts'
 import { useTheme } from '@/hooks/useTheme'
 import { agentRegistry } from '@/core/agent-registry'
 import { withColdStartRetry } from '@/lib/retry'
+import { electronApi, isElectron } from '@/lib/electron-bridge'
 
 import '@/agents/index'
 import '@/modules/index'
@@ -50,12 +51,23 @@ function GlobalShortcuts({
     }
   }, [refreshing, projectPath, setRefreshing, setAgentSummaries, setAgentFiles, pushToast, setError])
 
-  // Custom event hook so command palette can trigger refresh
+  // Custom events: refresh + sidebar toggle + navigate (from menu or Electron IPC)
   useEffect(() => {
     const onRefresh = () => refreshAll()
+    const onToggleSidebar = () => toggleSidebar()
+    const onNavigate = (e: Event) => {
+      const route = (e as CustomEvent<string>).detail
+      if (route) navigate(route)
+    }
     window.addEventListener('cct:refresh', onRefresh)
-    return () => window.removeEventListener('cct:refresh', onRefresh)
-  }, [refreshAll])
+    window.addEventListener('cct:toggle-sidebar', onToggleSidebar)
+    window.addEventListener('cct:navigate', onNavigate)
+    return () => {
+      window.removeEventListener('cct:refresh', onRefresh)
+      window.removeEventListener('cct:toggle-sidebar', onToggleSidebar)
+      window.removeEventListener('cct:navigate', onNavigate)
+    }
+  }, [refreshAll, toggleSidebar, navigate])
 
   useShortcuts([
     { key: 'k', meta: true, handler: onOpenPalette, ignoreInInput: false },
@@ -107,7 +119,7 @@ function buildRouter() {
 }
 
 export function App() {
-  const { setProjectPath, setPlatform, setError, setBackendHealthy } = useAppStore()
+  const { setProjectPath, setPlatform, setError, setBackendHealthy, projectPath } = useAppStore()
   useTheme()
 
   // Initial meta load + retry while backend is starting
@@ -133,6 +145,31 @@ export function App() {
     tryMeta()
     return () => { cancelled = true }
   }, [setProjectPath, setPlatform, setError, setBackendHealthy])
+
+  // Electron: register menu action + fs-watcher event listeners
+  useEffect(() => {
+    if (!isElectron) return
+    electronApi.onMenuAction((action, payload) => {
+      if (action === 'refresh')         window.dispatchEvent(new Event('cct:refresh'))
+      if (action === 'toggle-sidebar')  window.dispatchEvent(new Event('cct:toggle-sidebar'))
+      if (action === 'navigate')        window.dispatchEvent(new CustomEvent('cct:navigate', { detail: payload }))
+    })
+    electronApi.onSwitchProject((newPath) => {
+      setProjectPath(newPath)
+      window.dispatchEvent(new Event('cct:refresh'))
+    })
+    electronApi.onFsChanged(() => {
+      window.dispatchEvent(new Event('cct:refresh'))
+    })
+    return () => electronApi.offAll()
+  }, [setProjectPath])
+
+  // Electron: start watching the project config dirs when projectPath changes
+  useEffect(() => {
+    if (!isElectron || !projectPath) return
+    electronApi.watchPath(projectPath).catch(() => {/* ignore */})
+    return () => { electronApi.unwatch().catch(() => {/* ignore */}) }
+  }, [projectPath])
 
   // Heartbeat: ping /health every 5s, update backendHealthy
   useEffect(() => {

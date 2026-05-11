@@ -10,6 +10,13 @@ interface CctBridge {
   openFile: (path: string) => Promise<void>
   openInTerminal: (dirPath: string) => Promise<void>
   pickDirectory: (defaultPath?: string) => Promise<string | null>
+  showContextMenu: (items: Array<{ label: string; action: string; enabled?: boolean }>) => Promise<string | null>
+  watchPath: (path: string) => Promise<boolean>
+  unwatch: () => Promise<boolean>
+  onFsChanged: (cb: (payload: { path: string; file: string | null; event: string }) => void) => void
+  onSwitchProject: (cb: (newPath: string) => void) => void
+  onMenuAction: (cb: (action: string, payload?: unknown) => void) => void
+  offAll: () => void
 }
 
 declare global {
@@ -41,6 +48,37 @@ export const electronApi = {
   async pickDirectory(defaultPath?: string): Promise<string | null> {
     if (!window.cct) throw new Error('Not running in Electron')
     return window.cct.pickDirectory(defaultPath)
+  },
+
+  async showContextMenu(items: Array<{ label: string; action: string; enabled?: boolean }>): Promise<string | null> {
+    if (!window.cct) return null
+    return window.cct.showContextMenu(items)
+  },
+
+  async watchPath(p: string): Promise<boolean> {
+    if (!window.cct) return false
+    return window.cct.watchPath(p)
+  },
+
+  async unwatch(): Promise<boolean> {
+    if (!window.cct) return false
+    return window.cct.unwatch()
+  },
+
+  onFsChanged(cb: (payload: { path: string; file: string | null; event: string }) => void) {
+    window.cct?.onFsChanged(cb)
+  },
+
+  onSwitchProject(cb: (newPath: string) => void) {
+    window.cct?.onSwitchProject(cb)
+  },
+
+  onMenuAction(cb: (action: string, payload?: unknown) => void) {
+    window.cct?.onMenuAction(cb)
+  },
+
+  offAll() {
+    window.cct?.offAll()
   },
 
   /** Returns 'macOS' / 'Windows' / 'Linux' / 'Web' */

@@ -69,7 +69,7 @@ interface AppState {
 }
 
 let toastSeq = 0
-const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed', 'theme', 'recentProjects']
+const PERSISTED_KEYS: Array<keyof AppState> = ['sidebarCollapsed', 'theme', 'recentProjects', 'projectPath']
 
 function loadPersisted(): Partial<AppState> {
   if (typeof window === 'undefined') return {}
@@ -96,6 +96,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   projectPath: undefined,
   setProjectPath: (path) => {
     set({ projectPath: path })
+    persist(get())
     get().addRecentProject(path)
   },
 
