@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle, FolderOpen, Terminal } from 'lucide-react'
+import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle, FolderOpen, Terminal, Zap } from 'lucide-react'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
-import type { ApiFileDetail } from '@/core/api'
+import type { ApiFileDetail, ParsedHook } from '@/core/api'
 import { ExistsBadge } from '@/components/ui/Badges'
 import { ErrorState } from '@/components/ui/Skeleton'
 import { electronApi, isElectron } from '@/lib/electron-bridge'
@@ -241,6 +241,10 @@ export function FileDetail({ agentId, fileKey }: Props) {
             <span>对应 {fileSpec.counterpartAgent} 的等价文件：{fileSpec.syncStrategy ?? '无迁移策略'}</span>
           </div>
         ) : null}
+
+        {detail.parsed_hooks && detail.parsed_hooks.length > 0 && (
+          <HooksSection hooks={detail.parsed_hooks} />
+        )}
       </div>
     </div>
   )
@@ -410,6 +414,70 @@ function GoToSyncButton({ disabled }: { disabled: boolean }) {
     >
       前往同步中心 <ArrowRight size={12} />
     </button>
+  )
+}
+
+function HooksSection({ hooks }: { hooks: ParsedHook[] }) {
+  const events = [...new Set(hooks.map((h) => h.event))]
+
+  return (
+    <InfoSection icon="⚡" title="已注册的 Hooks">
+      <div className="border border-border-default rounded-xl overflow-hidden divide-y divide-border-subtle">
+        {events.map((event) => {
+          const entries = hooks.filter((h) => h.event === event)
+          return (
+            <div key={event} className="px-3 py-2.5">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={11} className="text-amber-500 flex-shrink-0" />
+                <span className="text-xs font-medium text-text-primary font-mono">{event}</span>
+                <span className="text-2xs text-text-tertiary">{entries.length} 条</span>
+              </div>
+              <div className="space-y-1.5">
+                {entries.map((h, i) => (
+                  <HookEntry key={i} hook={h} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </InfoSection>
+  )
+}
+
+function HookEntry({ hook }: { hook: ParsedHook }) {
+  const hasScript = hook.script_path != null
+  const exists    = hook.script_exists === true
+  const missing   = hook.script_exists === false
+
+  return (
+    <div className="bg-surface-base rounded-lg px-2.5 py-2 space-y-1">
+      {hook.matcher && (
+        <div className="text-2xs text-text-tertiary">
+          matcher: <span className="font-mono text-text-secondary">{hook.matcher}</span>
+        </div>
+      )}
+      <div className="flex items-start gap-2">
+        <code className="text-2xs font-mono text-text-secondary flex-1 break-all leading-relaxed">{hook.command}</code>
+        <CopyBtn text={hook.command} />
+      </div>
+      {hasScript && (
+        <div className={`flex items-center gap-1.5 text-2xs ${exists ? 'text-green-600' : missing ? 'text-red-500' : 'text-text-tertiary'}`}>
+          {exists ? '✓' : missing ? '✗' : '?'}
+          <span className="font-mono truncate">{hook.script_path}</span>
+          {exists && isElectron && (
+            <button
+              title="在 Finder 中显示"
+              onClick={() => electronApi.revealInFinder(hook.script_path!).catch(console.error)}
+              className="text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0 ml-1"
+            >
+              <FolderOpen size={10} />
+            </button>
+          )}
+          {missing && <span className="text-red-400 ml-1">（脚本文件不存在）</span>}
+        </div>
+      )}
+    </div>
   )
 }
 

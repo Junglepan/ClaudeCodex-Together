@@ -1,12 +1,55 @@
 from fastapi import APIRouter, Query, HTTPException
 from pathlib import Path
 from typing import Optional
+import json
+import shlex
+import os
 from pydantic import BaseModel
 
 from core.agents.registry import registry
 from core.safety import ensure_allowed, backup_file
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+SETTINGS_KEYS = {"global_settings", "project_settings"}
+
+
+def _parse_hooks(content: str) -> list[dict]:
+    """Flatten hooks from a settings.json into a list of structured entries."""
+    try:
+        data = json.loads(content)
+        hooks_data = data.get("hooks", {})
+    except Exception:
+        return []
+
+    result = []
+    for event, hook_groups in hooks_data.items():
+        if not isinstance(hook_groups, list):
+            continue
+        for group in hook_groups:
+            matcher = group.get("matcher") if isinstance(group, dict) else None
+            inner = group.get("hooks", []) if isinstance(group, dict) else []
+            for hook in inner:
+                if not isinstance(hook, dict):
+                    continue
+                cmd = hook.get("command", "")
+                script_path = None
+                script_exists = None
+                try:
+                    parts = shlex.split(cmd)
+                    if parts and (parts[0].startswith("/") or parts[0].startswith("~")):
+                        script_path = os.path.expanduser(parts[0])
+                        script_exists = os.path.isfile(script_path)
+                except Exception:
+                    pass
+                result.append({
+                    "event": event,
+                    "matcher": matcher,
+                    "command": cmd,
+                    "script_path": script_path,
+                    "script_exists": script_exists,
+                })
+    return result
 
 
 class WriteBody(BaseModel):
@@ -49,6 +92,10 @@ def file_meta(
                 counterpart_path = counterpart_file.path
                 counterpart_exists = counterpart_file.exists
 
+    parsed_hooks = None
+    if spec and spec.key in SETTINGS_KEYS and content:
+        parsed_hooks = _parse_hooks(content) or None
+
     return {
         "path": file.path,
         "exists": file.exists,
@@ -58,6 +105,7 @@ def file_meta(
         "counterpart_agent": spec.counterpart_agent if spec else None,
         "counterpart_path": counterpart_path,
         "counterpart_exists": counterpart_exists,
+        "parsed_hooks": parsed_hooks,
     }
 
 

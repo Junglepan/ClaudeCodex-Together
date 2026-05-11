@@ -17,6 +17,7 @@ class CodexAgent(AgentBase):
     @property
     def config_file_specs(self) -> list[ConfigFileSpec]:
         return [
+            # ── Global layer ────────────────────────────────────────────────
             ConfigFileSpec(
                 key="global_config",
                 label="config.toml",
@@ -36,7 +37,11 @@ class CodexAgent(AgentBase):
                     "MCP server 格式：\n"
                     "[mcp_servers.<name>]\n"
                     'command = "npx"\n'
-                    'args    = ["-y", "@mcp/server-github"]'
+                    'args    = ["-y", "@mcp/server-github"]\n\n'
+                    "[projects] 字段：\n"
+                    "• [projects.\"/path/to/project\"] 段定义每个项目的 trust_level\n"
+                    "• trust_level 直接影响 Codex 在该项目下的行为权限\n"
+                    "  （如 full-auto 允许无需审批执行）"
                 ),
                 counterpart_agent="claude",
                 counterpart_key="global_settings",
@@ -44,18 +49,21 @@ class CodexAgent(AgentBase):
             ConfigFileSpec(
                 key="global_instructions",
                 label="AGENTS.md",
-                path_template="{home}/AGENTS.md",
+                path_template="{home}/.codex/AGENTS.md",
                 scope="global",
                 kind="file",
                 format="markdown",
                 purpose="全局指令文件，在每次 Codex 会话启动时自动注入。优先级低于项目级 AGENTS.md。",
                 details=(
-                    "与 CLAUDE.md 的全局等价物，面向 Codex 生态。\n"
+                    "与 ~/.claude/CLAUDE.md 的 Codex 等价物。\n"
                     "避免包含 Claude 专属语法（/compact、/clear 等）。\n\n"
-                    "与项目级 AGENTS.md 合并时，项目配置优先。"
+                    "加载顺序（低 → 高）：\n"
+                    "1. ~/.codex/AGENTS.md（此文件，全局）\n"
+                    "2. {project}/AGENTS.md（项目根）\n"
+                    "3. 子目录 AGENTS.md（嵌套加载）"
                 ),
                 counterpart_agent="claude",
-                counterpart_key="project_instructions",
+                counterpart_key="global_instructions",
             ),
             ConfigFileSpec(
                 key="global_hooks",
@@ -87,27 +95,62 @@ class CodexAgent(AgentBase):
                 details=(
                     "文件格式（带 YAML frontmatter 的 Markdown）：\n"
                     "---\nname: agent-name\ndescription: 使用场景描述\n---\n<Agent 指令>\n\n"
-                    "从 Claude 迁移：~/.claude/agents/ → 此目录"
+                    "Codex 根据任务上下文匹配 description 自动选择 Agent。\n"
+                    "全局 Agent 优先级低于项目级同名 Agent。"
                 ),
                 counterpart_agent="claude",
-                counterpart_key="project_agents",
+                counterpart_key="global_agents",
             ),
             ConfigFileSpec(
                 key="global_skills",
-                label=".agents/skills/",
-                path_template="{home}/.agents/skills/",
+                label=".codex/skills/",
+                path_template="{home}/.codex/skills/",
                 scope="global",
                 kind="dir",
                 format="dir",
-                purpose="全局技能定义（Prompt 模板）。从 Claude skills 迁移后的目标位置。",
+                purpose="Codex 原生技能目录（非迁移路径）。存放全局可用的 Prompt 模板技能。",
                 details=(
+                    "此路径是 Codex 自身的 skills 存储位置\n"
+                    "（区别于迁移中转路径 ~/.agents/skills/）。\n\n"
                     "文件格式（带 YAML frontmatter 的 Markdown）：\n"
                     "---\nname: skill-name\ndescription: 使用场景\n---\n<技能提示>\n\n"
-                    "从 Claude 迁移：~/.claude/skills/<name>/SKILL.md → ~/.agents/skills/<name>.md"
+                    "从 Claude 迁移：~/.claude/skills/<name>/SKILL.md → ~/.codex/skills/<name>.md"
                 ),
                 counterpart_agent="claude",
                 counterpart_key="global_skills",
             ),
+            ConfigFileSpec(
+                key="global_memories",
+                label="memories/",
+                path_template="{home}/.codex/memories/",
+                scope="global",
+                kind="dir",
+                format="dir",
+                purpose="Codex 记忆系统目录（Codex 独有功能，Claude 无对应机制）。只读展示。",
+                details=(
+                    "需在 config.toml 中启用：\n"
+                    "[features]\nmemories = true\n\n"
+                    "目录内包含：\n"
+                    "• MEMORY.md — 结构化记忆条目\n"
+                    "• raw_memories.md — 原始记忆日志\n"
+                    "• memory_summary.md — 压缩摘要\n\n"
+                    "未启用时目录不存在，展示「此功能未开启」。不在同步范围内。"
+                ),
+            ),
+            ConfigFileSpec(
+                key="global_auth",
+                label="auth.json",
+                path_template="{home}/.codex/auth.json",
+                scope="global",
+                kind="file",
+                format="json",
+                purpose="存储 Codex 认证信息（API key、token 等）。由 Codex 自动管理。只读展示。",
+                details=(
+                    "等价于 Claude 的 ~/.claude.json，存储 API key 和认证 token。\n\n"
+                    "注意：由 Codex 自动管理，手动编辑可能破坏认证状态。不在同步范围内。"
+                ),
+            ),
+            # ── Project layer ────────────────────────────────────────────────
             ConfigFileSpec(
                 key="project_config",
                 label=".codex/config.toml",
@@ -172,20 +215,5 @@ class CodexAgent(AgentBase):
                 ),
                 counterpart_agent="claude",
                 counterpart_key="project_agents",
-            ),
-            ConfigFileSpec(
-                key="project_skills",
-                label=".agents/skills/",
-                path_template="{project}/.agents/skills/",
-                scope="project",
-                kind="dir",
-                format="dir",
-                purpose="项目级技能定义，优先级高于全局同名技能。",
-                details=(
-                    "格式与全局 .agents/skills/ 相同。\n"
-                    "从 Claude 迁移：.claude/skills/<name>/SKILL.md → .agents/skills/<name>.md"
-                ),
-                counterpart_agent="claude",
-                counterpart_key="global_skills",
             ),
         ]

@@ -17,6 +17,26 @@ class ClaudeAgent(AgentBase):
     @property
     def config_file_specs(self) -> list[ConfigFileSpec]:
         return [
+            # ── Global layer ────────────────────────────────────────────────
+            ConfigFileSpec(
+                key="global_instructions",
+                label="CLAUDE.md",
+                path_template="{home}/.claude/CLAUDE.md",
+                scope="global",
+                kind="file",
+                format="markdown",
+                purpose="全局自然语言指令，在每次 Claude 会话启动时自动注入，优先级低于项目级 CLAUDE.md。",
+                details=(
+                    "加载顺序（低 → 高）：\n"
+                    "1. ~/.claude/CLAUDE.md（此文件，全局）\n"
+                    "2. {project}/CLAUDE.md（项目根）\n"
+                    "3. 子目录 CLAUDE.md（嵌套加载）\n\n"
+                    "适合放置：跨所有项目都适用的个人习惯、通用编码规范、全局禁止事项。"
+                ),
+                counterpart_agent="codex",
+                counterpart_key="global_instructions",
+                sync_strategy="迁移：内容复制并清洗 Claude 专属语法（/compact 等）",
+            ),
             ConfigFileSpec(
                 key="global_settings",
                 label="settings.json",
@@ -32,8 +52,9 @@ class ClaudeAgent(AgentBase):
                     "• permissions.allow / deny — 工具调用权限\n"
                     "• model — 覆盖默认模型\n"
                     "• env — 注入每个会话的环境变量\n\n"
-                    "生效原理：Claude 启动时优先加载此文件，覆盖内置默认值。\n"
-                    "优先级：用户配置 > 项目配置 > 全局默认"
+                    "配置合并优先级（低 → 高）：\n"
+                    "内置默认值 → 此文件（全局） → .claude/settings.json（项目）"
+                    " → .claude/settings.local.json（本地覆盖） → 命令行参数"
                 ),
                 counterpart_agent="codex",
                 counterpart_key="global_config",
@@ -69,26 +90,60 @@ class ClaudeAgent(AgentBase):
                     "SKILL.md frontmatter：\n"
                     "  name:        调用时的斜杠命令名\n"
                     "  description: /help 中展示的说明\n\n"
-                    "迁移目标：~/.agents/skills/<name>.md"
+                    "迁移目标：~/.codex/skills/<name>.md"
                 ),
                 counterpart_agent="codex",
                 counterpart_key="global_skills",
-                sync_strategy="迁移：SKILL.md → ~/.agents/skills/<name>.md（frontmatter 适配）",
+                sync_strategy="迁移：SKILL.md → ~/.codex/skills/<name>.md（frontmatter 适配）",
             ),
             ConfigFileSpec(
-                key="global_stop_hook",
-                label="stop-hook-git-check.sh",
-                path_template="{home}/.claude/stop-hook-git-check.sh",
+                key="global_agents",
+                label="agents/",
+                path_template="{home}/.claude/agents/",
                 scope="global",
-                kind="file",
-                format="shell",
-                purpose="Stop 事件钩子脚本：检查未提交变更和未推送提交，若有则阻止会话关闭（exit 2）。",
+                kind="dir",
+                format="dir",
+                purpose="全局自定义子 Agent 定义，所有项目均可使用。每个 .md 文件定义一个专门化角色。",
                 details=(
-                    "通过 stdin 接收 JSON，包含 stop_hook_active 等字段。\n\n"
-                    "退出码：\n  0 — 允许关闭\n  2 — 阻止关闭\n\n"
-                    "注意：Codex 没有 Stop 事件等价物，此 hook 无法迁移。"
+                    "文件格式（带 YAML frontmatter 的 Markdown）：\n"
+                    "---\nname: agent-name\ndescription: 何时使用此 agent\ntools: [Read, Write, Bash]\n---\n<系统提示>\n\n"
+                    "全局 Agent 优先级低于项目级同名 Agent（.claude/agents/）。\n"
+                    "Claude Code 根据任务描述自动匹配调用。"
+                ),
+                counterpart_agent="codex",
+                counterpart_key="global_agents",
+                sync_strategy="迁移：.md → ~/.codex/agents/<name>.md（frontmatter 适配）",
+            ),
+            ConfigFileSpec(
+                key="global_commands",
+                label="commands/",
+                path_template="{home}/.claude/commands/",
+                scope="global",
+                kind="dir",
+                format="dir",
+                purpose="用户级自定义斜杠命令目录（Claude Code 1.x 引入）。每个 .md 文件即一个命令，通过 /<filename> 调用。",
+                details=(
+                    "每个文件直接映射为一个斜杠命令（无需 frontmatter，文件名即命令名）。\n\n"
+                    "与 skills/ 的区别：\n"
+                    "• skills/ — 需要 SKILL.md + 子目录结构，支持更复杂的 prompt 模板\n"
+                    "• commands/ — 单文件即命令，更轻量\n\n"
+                    "Codex 无等价机制，此目录不参与同步。"
                 ),
             ),
+            ConfigFileSpec(
+                key="global_plugins",
+                label="installed_plugins.json",
+                path_template="{home}/.claude/plugins/installed_plugins.json",
+                scope="global",
+                kind="file",
+                format="json",
+                purpose="已安装插件的清单文件，由 Claude Code 自动管理。只读展示，不提供编辑/删除。",
+                details=(
+                    "由 Claude Code 插件系统自动写入，记录已安装插件的名称、版本和来源。\n\n"
+                    "注意：不建议手动编辑，可能导致插件系统状态不一致。不在同步范围内。"
+                ),
+            ),
+            # ── Project layer ────────────────────────────────────────────────
             ConfigFileSpec(
                 key="project_instructions",
                 label="CLAUDE.md",
@@ -124,7 +179,21 @@ class ClaudeAgent(AgentBase):
                     "• hooks.SessionStart — 安装项目依赖\n"
                     "• permissions.allow — 允许项目特定工具\n"
                     "• env — 注入项目环境变量\n\n"
-                    "与全局配置合并时，项目配置优先。"
+                    "与全局配置合并时，项目配置优先。可被 .claude/settings.local.json 进一步覆盖（不提交 git）。"
+                ),
+            ),
+            ConfigFileSpec(
+                key="project_settings_local",
+                label=".claude/settings.local.json",
+                path_template="{project}/.claude/settings.local.json",
+                scope="project",
+                kind="file",
+                format="json",
+                purpose="项目本地覆盖层。结构与 settings.json 相同，但不应提交到 git（.gitignore 排除）。",
+                details=(
+                    "配置合并优先级中位于「项目配置之上、CLI 参数之下」，是独立的一层。\n\n"
+                    "适合放置：本地开发专用覆盖（如个人 API key、调试工具权限）。\n\n"
+                    "注意：此文件不参与同步，也不在备份范围内（个人敏感配置）。"
                 ),
             ),
             ConfigFileSpec(
@@ -143,11 +212,26 @@ class ClaudeAgent(AgentBase):
                     "tools: [Read, Write, Bash]\n"
                     "---\n"
                     "<系统提示>\n\n"
+                    "项目级 Agent 优先级高于全局同名 Agent。\n"
                     "迁移目标：.codex/agents/<name>.md（frontmatter 适配）"
                 ),
                 counterpart_agent="codex",
                 counterpart_key="project_agents",
                 sync_strategy="迁移：.md → .codex/agents/<name>.md（frontmatter 适配，tools 列表转换）",
+            ),
+            ConfigFileSpec(
+                key="project_commands",
+                label=".claude/commands/",
+                path_template="{project}/.claude/commands/",
+                scope="project",
+                kind="dir",
+                format="dir",
+                purpose="项目级自定义斜杠命令目录。优先级高于全局 commands/，同名命令覆盖全局版本。",
+                details=(
+                    "与 ~/.claude/commands/ 格式相同，每个 .md 文件映射为一个斜杠命令。\n\n"
+                    "适合放置项目专用的工作流命令（如发布脚本、代码生成模板）。\n"
+                    "Codex 无等价机制，此目录不参与同步。"
+                ),
             ),
             ConfigFileSpec(
                 key="project_mcp",

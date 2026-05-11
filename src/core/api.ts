@@ -41,6 +41,14 @@ export interface ApiConfigFile {
   purpose?: string
 }
 
+export interface ParsedHook {
+  event: string
+  matcher?: string | null
+  command: string
+  script_path?: string | null
+  script_exists?: boolean | null
+}
+
 export interface ApiFileDetail {
   path: string
   exists: boolean
@@ -50,6 +58,7 @@ export interface ApiFileDetail {
   counterpart_agent?: string
   counterpart_path?: string
   counterpart_exists?: boolean
+  parsed_hooks?: ParsedHook[] | null
 }
 
 export interface ApiSyncPlan {

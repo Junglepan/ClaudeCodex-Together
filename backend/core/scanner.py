@@ -62,10 +62,18 @@ class SyncableInstructions:
 
 
 @dataclass
+class SyncableCommand:
+    name: str
+    source_path: Path
+    content: str
+
+
+@dataclass
 class ScanResult:
     instructions: list[SyncableInstructions] = field(default_factory=list)
     skills: list[SyncableSkill] = field(default_factory=list)
     agents: list[SyncableAgent] = field(default_factory=list)
+    commands: list[SyncableCommand] = field(default_factory=list)
 
 
 # Patterns that are Claude-specific and need cleaning/flagging
@@ -108,7 +116,7 @@ def scan_global(home: Optional[Path] = None) -> ScanResult:
                         frontmatter=fm.data,
                     ))
 
-    # Agents
+    # Agents: ~/.claude/agents/
     agents_dir = home / ".claude" / "agents"
     if agents_dir.is_dir():
         for agent_file in sorted(agents_dir.glob("*.md")):
@@ -120,6 +128,16 @@ def scan_global(home: Optional[Path] = None) -> ScanResult:
                 source_path=agent_file,
                 content=content,
                 frontmatter=fm.data,
+            ))
+
+    # Commands: ~/.claude/commands/ (Codex has no equivalent)
+    commands_dir = home / ".claude" / "commands"
+    if commands_dir.is_dir():
+        for cmd_file in sorted(commands_dir.glob("*.md")):
+            result.commands.append(SyncableCommand(
+                name=cmd_file.stem,
+                source_path=cmd_file,
+                content=cmd_file.read_text(),
             ))
 
     return result
@@ -164,6 +182,16 @@ def scan_project(project: Optional[Path] = None) -> ScanResult:
                 source_path=agent_file,
                 content=content,
                 frontmatter=fm.data,
+            ))
+
+    # Commands: .claude/commands/ (Codex has no equivalent)
+    commands_dir = project / ".claude" / "commands"
+    if commands_dir.is_dir():
+        for cmd_file in sorted(commands_dir.glob("*.md")):
+            result.commands.append(SyncableCommand(
+                name=cmd_file.stem,
+                source_path=cmd_file,
+                content=cmd_file.read_text(),
             ))
 
     return result
