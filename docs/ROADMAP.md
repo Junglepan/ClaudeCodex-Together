@@ -201,11 +201,26 @@
 > 2. **转换逻辑黑盒**：`converter.py` 做了清洗斜杠命令、工具名注释化、frontmatter 适配等有意义的转换，但前端 Notes 列只有一句结果，用户不知道改了什么、为什么标 check
 > 3. **状态语义模糊**：`Added / Check before using / Not Added` 三种状态含义不精确——"Not Added"可能是"目标已存在跳过"也可能是"Codex 不支持此类型"，两种情况含义完全不同
 
-### E-1 扫描结果面板（执行前自动展示）
+### E-1 前端四阶段渐进流程
 
-- [ ] **E-1-1** 进入同步页面即自动触发 `GET /sync/plan`（dry run），无需用户手动点击"预演"
-  - 扫描是只读操作，应主动呈现，不应藏在按钮后面
-  - 加载时展示骨架屏，失败时展示"后端未运行"提示
+> 对应后端四个独立接口（见 E-4）。每个阶段结果留在页面，用户在每一步都能看到发生了什么。
+
+- [ ] **E-1-1** 页面加载自动触发第一阶段 `POST /sync/scan`（纯只读）
+  - scan 无副作用，应主动呈现，不藏在按钮后面
+  - 加载中展示骨架屏；后端不可达时展示"后端未运行"提示，不报错
+  - scan 完成后展示"扫描结果面板"，出现"查看转换计划 →"按钮
+
+- [ ] **E-1-1b** 用户点击"查看转换计划"触发第二阶段 `POST /sync/plan`（scan + convert，不写）
+  - plan 在 scan 结果下方叠加展示转换详情，原 scan 面板保持可见
+  - plan 完成后"查看转换计划"按钮变为已完成态，出现"预演（Dry Run）→"按钮
+
+- [ ] **E-1-1c** 用户点击"预演"触发第三阶段 `POST /sync/dry-run`（scan + convert + write dry_run=True）
+  - dry-run 在计划结果下方叠加展示每项目标文件的实际冲突检测结果
+  - 此时状态标签从"待同步/有冲突"等静态状态变为"将写入/将跳过/将覆盖"等明确预期
+  - dry-run 完成后出现"执行同步（N 项）"按钮
+
+- [ ] **E-1-1d** 用户点击"执行同步"触发第四阶段 `POST /sync/execute`（实际写入）
+  - 执行结果追加展示，不覆盖前三阶段的面板（保留完整操作历史）
 
 - [ ] **E-1-2** 扫描结果面板逐项展示，每行包含：
   ```
@@ -266,32 +281,54 @@
   - diff 格式：红色删除行 / 绿色新增行（仅展示变更行 ±3 行上下文，不展示全文）
   - 覆盖写入的文件额外展示备份路径：`已备份至 ~/.codex/agents/architect.md.bak.20260511T143200`
 
-### E-4 后端配合改动（minor）
+### E-4 后端：拆分 sync 路由为四个独立接口
 
-- [ ] **E-4-1** `/sync/plan` 响应中补充 `diff_summary` 字段
-  - 现有 plan 接口已返回 `status` 和 `notes`，需补充：
+> **核心判断**：后端 `scan_global/project()`、`convert_*()`、`write_files(dry_run)` 四类函数已存在且职责分离。
+> 问题在于 `_build_plan` 把这四步混在一起，两个路由（`/sync/plan`、`/sync/execute`）把所有阶段耦合了，
+> 前端拿到的数据无法区分"扫描到了什么"和"转换后是什么"和"预计写入什么"。
+> 改动量小：函数本身不动，只拆路由。
+
+- [ ] **E-4-1** 拆分 `backend/api/routers/sync.py`，将 `_build_plan` 逻辑拆成四个路由
+
+  | 接口 | 调用逻辑 | 返回 |
+  |------|----------|------|
+  | `POST /sync/scan` | 只调用 `scanner.scan_global()` / `scan_project()` | 每项的类型、名称、源路径、原始内容摘要（不转换） |
+  | `POST /sync/plan` | scan + `converter.convert_*()` | scan 结果 + 目标路径 + 转换状态 + `warnings`（删了哪些行） |
+  | `POST /sync/dry-run` | scan + convert + `write_files(dry_run=True)` | plan 结果 + 每项目标文件是否已存在、将跳过/写入/覆盖 |
+  | `POST /sync/execute` | scan + convert + `write_files(dry_run=False)` | 实际写入报告（写入成功/跳过/失败） |
+
+  - 四个接口共享相同的 request body（scope、project、overwrite）
+  - `POST /sync/plan` 和 `POST /sync/dry-run` 保持幂等（无副作用）
+  - 现有 `GET /sync/plan` 和 `POST /sync/execute` 路由可先保留做兼容，标记 deprecated
+
+- [ ] **E-4-2** `/sync/plan` 响应透传 `converter.py` 的 `warnings` 字段
+  - `converter.py` 已记录 warnings（删除的斜杠命令行、工具名引用检测结果），但当前路由响应将其丢弃
+  - 改动：在 `_build_plan` / plan 路由的序列化处将 `warnings` 字段包含进响应体
+  - 响应结构（每项）：
     ```json
     {
-      "item": "skill/review",
-      "status": "conflict",
-      "notes": "...",
-      "diff_summary": {
+      "type": "skill",
+      "name": "review",
+      "source_path": "~/.claude/skills/review/SKILL.md",
+      "target_path": "~/.codex/skills/review/SKILL.md",
+      "status": "pending",
+      "warnings": {
         "removed_lines": ["/compact", "/clear"],
         "tool_comments": ["Read", "Write", "Bash"],
-        "check_lines": [{"line": 12, "reason": "tool name reference"}]
+        "check_lines": [{"line": 12, "content": "使用 Bash 工具执行..."}]
       }
     }
     ```
-  - 前端用 `diff_summary` 填充 E-1-3 的展开抽屉内容
+  - 前端用 `warnings` 填充 E-1-3 展开抽屉内容（这是唯一需要补充的字段，其余逻辑不变）
 
-- [ ] **E-4-2** 新增 `settings.local.json` 排除规则
-  - 本地覆盖层含个人敏感配置，明确不纳入同步范围
-  - 在 plan 响应中如检测到此类文件，状态设为 `不可迁移`，notes 说明"本地覆盖文件不参与同步"
+- [ ] **E-4-3** 新增 `settings.local.json` 排除规则
+  - 本地覆盖层含个人敏感配置，不纳入同步范围
+  - scan 阶段检测到此类文件时，状态直接设为 `unsupported`，notes 说明"本地覆盖文件不参与同步"
 
-- [ ] **E-4-3** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
-  - `global_instructions`（CLAUDE.md → AGENTS.md）：加入迁移优先级，走 instruction converter
-  - `global_agents`（~/.claude/agents/ → ~/.codex/agents/）：加入迁移优先级，走 agent converter
-  - `global_commands`（~/.claude/commands/）：状态固定为 `不可迁移`，notes 说明"Codex 无等价斜杠命令机制"
+- [ ] **E-4-4** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
+  - `global_instructions`（CLAUDE.md → AGENTS.md）：加入 scan 范围，走 instruction converter
+  - `global_agents`（~/.claude/agents/ → ~/.codex/agents/）：加入 scan 范围，走 agent converter
+  - `global_commands`（~/.claude/commands/）：scan 到后状态固定为 `unsupported`，notes 说明"Codex 无等价斜杠命令机制"
 
 ---
 
@@ -304,6 +341,11 @@
 - [ ] **F-2** `backend/core/scanner.py` 扩展扫描范围
   - 覆盖 `~/.claude/commands/` 和 `.claude/commands/` 目录
   - 覆盖 `~/.claude/agents/`（全局 agent 目录）
+
+- [ ] **F-3** sync 路由拆分（依赖 E-4-1 完成后统一执行）
+  - E-4 已描述接口设计；F-3 作为执行入口，标记 E-4-1 ～ E-4-4 为本模块的后端实现任务
+  - 涉及文件：`backend/api/routers/sync.py`（路由拆分）、`backend/core/sync/converter.py`（warnings 透传）
+  - 执行顺序：F-1（agents 定义）→ F-2（scanner 扩展）→ F-3（路由拆分），三步顺序依赖
 
 ---
 
