@@ -118,9 +118,17 @@ export function ProjectSelector() {
     .slice(0, 5)
   const discoveredNotCurrent = discovered.filter((d) => d.path !== projectPath)
   const hasEmptyFirstRun = !loadingDiscover && discoveredNotCurrent.length === 0 && recentNotDiscovered.length === 0
-  const latestDiscoveredPath = discovered
-    .filter((p) => p.last_used !== null)
-    .sort((a, b) => (b.last_used ?? 0) - (a.last_used ?? 0))[0]?.path
+
+  // "上次使用": prefer frontend recentProjects (updates on every switch),
+  // fall back to backend mtime for first-run scenario
+  const latestDiscoveredPath = (() => {
+    const discoveredSet = new Set(discoveredNotCurrent.map((d) => d.path))
+    const fromRecent = recentProjects.find((p) => p !== projectPath && discoveredSet.has(p))
+    if (fromRecent) return fromRecent
+    return discovered
+      .filter((p) => p.path !== projectPath && p.last_used !== null)
+      .sort((a, b) => (b.last_used ?? 0) - (a.last_used ?? 0))[0]?.path ?? null
+  })()
 
   return (
     <div className="relative no-drag" ref={ref}>
@@ -172,18 +180,20 @@ export function ProjectSelector() {
                     : 'opacity-50 cursor-not-allowed text-text-tertiary'
                 }`}
               >
-                <FolderOpen size={11} className="text-text-tertiary flex-shrink-0" />
+                <FolderOpen size={11} className="text-text-tertiary flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium truncate">{proj.name}</span>
-                    {!proj.exists && <span className="text-2xs text-text-tertiary">(已删除)</span>}
+                    {!proj.exists && <span className="text-2xs text-text-tertiary flex-shrink-0">(已删除)</span>}
                     {proj.path === latestDiscoveredPath && (
-                      <span className="text-2xs text-accent-blue bg-accent-blue/10 px-1.5 py-0.5 rounded">上次使用</span>
+                      <span className="text-2xs text-accent-blue flex-shrink-0">· 上次使用</span>
                     )}
                   </div>
-                  <code className="text-2xs font-mono text-text-tertiary truncate block">{proj.path}</code>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <code className="text-2xs font-mono text-text-tertiary truncate">{proj.path}</code>
+                    <SourceBadge source={proj.source} />
+                  </div>
                 </div>
-                <SourceBadge source={proj.source} />
               </button>
             ))}
 
@@ -205,10 +215,10 @@ export function ProjectSelector() {
                     onClick={() => applyProject(p)}
                     className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-hover transition-colors text-left"
                   >
-                    <Clock size={11} className="text-text-tertiary flex-shrink-0" />
+                    <Clock size={11} className="text-text-tertiary flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-text-primary truncate">{basename(p)}</div>
-                      <code className="text-2xs font-mono text-text-tertiary truncate block">{p}</code>
+                      <code className="text-2xs font-mono text-text-tertiary truncate block mt-0.5">{p}</code>
                     </div>
                   </button>
                 ))}
