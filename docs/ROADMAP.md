@@ -145,7 +145,8 @@
 
 - [ ] **I-1-2** 修正 agents 目录的格式描述
   - 现状：`details` 中描述格式为 `.md`（从 Claude 照搬）
-  - 应改为：Codex agents 文件实际是 `.toml` 格式
+  - 待改为：Codex agents 文件实际格式（`.toml` 或 `.md`，待验证）
+  - **⚠️ 执行前须验证**：检查本机 `~/.codex/agents/` 下实际文件后缀，确认格式后再改
   - 同步更新 `global_agents` 和 `project_agents` 两个条目的 `details` 字段
 
 - [ ] **I-1-3** 重新定位 `~/.agents/skills/` 和 `{project}/.agents/skills/`
