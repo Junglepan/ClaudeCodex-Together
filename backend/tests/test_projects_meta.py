@@ -12,14 +12,14 @@ from main import meta
 
 
 class ProjectsAndMetaTests(unittest.TestCase):
-    def test_meta_keeps_project_path_unset_without_env_override(self):
+    def test_meta_defaults_project_path_to_user_home_without_env_override(self):
         with patch.dict(os.environ, {"CC_STEWARD_PROJECT": "", "CCT_PROJECT": ""}, clear=False):
             os.environ.pop("CC_STEWARD_PROJECT", None)
             os.environ.pop("CCT_PROJECT", None)
 
             result = meta()
 
-            self.assertIsNone(result["project_path"])
+            self.assertEqual(result["project_path"], str(Path.home()))
 
     def test_merge_preserves_latest_last_used_and_sorts_recent_first(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -28,6 +28,8 @@ interface AppState {
   // Platform info (OS, hostname)
   platform: string | undefined
   setPlatform: (p: string) => void
+  homePath: string | undefined
+  setHomePath: (p: string) => void
 
   // Sidebar collapsed state (icons-only)
   sidebarCollapsed: boolean
@@ -114,6 +116,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   platform: undefined,
   setPlatform: (platform) => set({ platform }),
+  homePath: undefined,
+  setHomePath: (homePath) => set({ homePath }),
 
   sidebarCollapsed: false,
   toggleSidebar: () => {

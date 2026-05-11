@@ -126,7 +126,7 @@ export interface ApiResolvedConfig {
 }
 
 export interface ApiMeta {
-  project_path: string | null
+  project_path: string
   home_path: string
   platform: string
   hostname: string

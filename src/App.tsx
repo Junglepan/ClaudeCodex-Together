@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { ToastHost } from '@/components/ui/Toast'
@@ -29,7 +29,7 @@ function GlobalShortcuts({
     projectPath, refreshing, pushToast, setError, toggleSidebar,
   } = useAppStore()
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async ({ notify = true }: { notify?: boolean } = {}) => {
     if (refreshing) return
     setRefreshing(true)
     setError(null)
@@ -41,7 +41,7 @@ function GlobalShortcuts({
       ]))
       setAgentSummaries(summaries)
       all.forEach((a, i) => setAgentFiles(a.id, lists[i]))
-      pushToast({ kind: 'success', message: '已刷新' })
+      if (notify) pushToast({ kind: 'success', message: '已刷新' })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
@@ -53,7 +53,10 @@ function GlobalShortcuts({
 
   // Custom events: refresh + sidebar toggle + navigate (from menu or Electron IPC)
   useEffect(() => {
-    const onRefresh = () => refreshAll()
+    const onRefresh = (e: Event) => {
+      const detail = (e as CustomEvent<{ notify?: boolean }>).detail
+      refreshAll({ notify: detail?.notify !== false })
+    }
     const onToggleSidebar = () => toggleSidebar()
     const onNavigate = (e: Event) => {
       const route = (e as CustomEvent<string>).detail
@@ -72,7 +75,7 @@ function GlobalShortcuts({
   useShortcuts([
     { key: 'k', meta: true, handler: onOpenPalette, ignoreInInput: false },
     { key: '?',           handler: onOpenShortcuts },
-    { key: 'r', meta: true, handler: refreshAll },
+    { key: 'r', meta: true, handler: () => refreshAll() },
     { key: 'b', meta: true, handler: toggleSidebar },
     { key: 'slash', handler: () => {
       const el = document.querySelector<HTMLInputElement>('input[type="text"][placeholder*="搜索"], input[type="text"][placeholder*="搜"]')
@@ -119,7 +122,8 @@ function buildRouter() {
 }
 
 export function App() {
-  const { setProjectPath, setPlatform, setError, setBackendHealthy, projectPath } = useAppStore()
+  const { setProjectPath, setPlatform, setHomePath, setError, setBackendHealthy, projectPath, homePath } = useAppStore()
+  const fsRefreshTimer = useRef<number | undefined>(undefined)
   useTheme()
 
   // Initial meta load + retry while backend is starting
@@ -131,6 +135,7 @@ export function App() {
         if (cancelled) return
         if (d.project_path) setProjectPath(d.project_path)
         if (d.platform) setPlatform(d.platform)
+        if (d.home_path) setHomePath(d.home_path)
         setBackendHealthy(true)
       } catch (e) {
         if (cancelled) return
@@ -144,7 +149,7 @@ export function App() {
     }
     tryMeta()
     return () => { cancelled = true }
-  }, [setProjectPath, setPlatform, setError, setBackendHealthy])
+  }, [setProjectPath, setPlatform, setHomePath, setError, setBackendHealthy])
 
   // Electron: register menu action + fs-watcher event listeners
   useEffect(() => {
@@ -159,17 +164,34 @@ export function App() {
       window.dispatchEvent(new Event('cct:refresh'))
     })
     electronApi.onFsChanged(() => {
-      window.dispatchEvent(new Event('cct:refresh'))
+      if (fsRefreshTimer.current) window.clearTimeout(fsRefreshTimer.current)
+      fsRefreshTimer.current = window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('cct:refresh', { detail: { notify: false } }))
+      }, 300)
     })
-    return () => electronApi.offAll()
+    return () => {
+      if (fsRefreshTimer.current) window.clearTimeout(fsRefreshTimer.current)
+      electronApi.offAll()
+    }
   }, [setProjectPath])
 
-  // Electron: start watching the project config dirs when projectPath changes
+  // Electron: watch only config paths. Avoid recursively watching the user's home dir.
   useEffect(() => {
-    if (!isElectron || !projectPath) return
-    electronApi.watchPath(projectPath).catch(() => {/* ignore */})
+    if (!isElectron || !projectPath || !homePath) return
+    const paths = [
+      `${homePath}/.claude/CLAUDE.md`,
+      `${homePath}/.claude/settings.json`,
+      `${homePath}/.codex/AGENTS.md`,
+      `${homePath}/.codex/config.toml`,
+      `${projectPath}/CLAUDE.md`,
+      `${projectPath}/AGENTS.md`,
+      `${projectPath}/.claude/settings.json`,
+      `${projectPath}/.claude/settings.local.json`,
+      `${projectPath}/.codex/config.toml`,
+    ]
+    electronApi.watchPath(Array.from(new Set(paths))).catch(() => {/* ignore */})
     return () => { electronApi.unwatch().catch(() => {/* ignore */}) }
-  }, [projectPath])
+  }, [projectPath, homePath])
 
   // Heartbeat: ping /health every 5s, update backendHealthy
   useEffect(() => {

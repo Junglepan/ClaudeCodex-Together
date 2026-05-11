@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('cct', {
   showContextMenu: (items: Array<{ label: string; action: string; enabled?: boolean }>): Promise<string | null> =>
     ipcRenderer.invoke('cct:show-context-menu', items),
 
-  watchPath: (watchPath: string): Promise<boolean> =>
+  watchPath: (watchPath: string | string[]): Promise<boolean> =>
     ipcRenderer.invoke('cct:watch-path', watchPath),
 
   unwatch: (): Promise<boolean> =>

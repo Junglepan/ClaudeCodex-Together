@@ -8,6 +8,8 @@
 ## [Unreleased] — 2026-05-11
 
 ### 修复
+- 默认项目路径恢复为用户 home 目录，同时 Electron 文件监听只监听 Claude/Codex 配置路径，避免递归监听整个 home。
+- Electron 文件变动触发的后台刷新不再弹出“已刷新”成功 toast，并增加 300ms 防抖，避免刷新弹窗堆叠。
 - 配置生效树：指令加载文案改为“全部拼接注入”，避免误导为覆盖关系。
 - Codex resolved agents 扫描改为读取 `.toml` 文件，并在缺少 `tomllib/tomli` 时优雅降级。
 - Claude resolved settings 对 `hooks` / `permissions` 使用多层追加合并，标记为“多层合并”。

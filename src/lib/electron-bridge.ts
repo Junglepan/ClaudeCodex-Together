@@ -11,7 +11,7 @@ interface CctBridge {
   openInTerminal: (dirPath: string) => Promise<void>
   pickDirectory: (defaultPath?: string) => Promise<string | null>
   showContextMenu: (items: Array<{ label: string; action: string; enabled?: boolean }>) => Promise<string | null>
-  watchPath: (path: string) => Promise<boolean>
+  watchPath: (path: string | string[]) => Promise<boolean>
   unwatch: () => Promise<boolean>
   onFsChanged: (cb: (payload: { path: string; file: string | null; event: string }) => void) => void
   onSwitchProject: (cb: (newPath: string) => void) => void
@@ -55,7 +55,7 @@ export const electronApi = {
     return window.cct.showContextMenu(items)
   },
 
-  async watchPath(p: string): Promise<boolean> {
+  async watchPath(p: string | string[]): Promise<boolean> {
     if (!window.cct) return false
     return window.cct.watchPath(p)
   },

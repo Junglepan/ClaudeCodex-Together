@@ -95,9 +95,9 @@ function registerIpc() {
     })
   })
 
-  // File-system watcher: watch a directory and emit 'cct:fs-changed' events
-  ipcMain.handle('cct:watch-path', async (_e, watchPath: string) => {
-    startWatcher(watchPath)
+  // File-system watcher: watch config paths and emit 'cct:fs-changed' events
+  ipcMain.handle('cct:watch-path', async (_e, watchPath: string | string[]) => {
+    startWatcher(Array.isArray(watchPath) ? watchPath : [watchPath])
     return true
   })
 
@@ -223,11 +223,13 @@ function stopWatcher() {
   }
 }
 
-function startWatcher(watchPath: string) {
+function startWatcher(watchPaths: string[]) {
   stopWatcher()
-  if (!fs.existsSync(watchPath)) return
+  const existingPaths = watchPaths.filter((watchPath) => fs.existsSync(watchPath))
+  if (existingPaths.length === 0) return
 
-  const onChange = (eventType: string, filename: string | Buffer | null) => {
+  const watchers: fs.FSWatcher[] = []
+  const onChange = (watchPath: string, eventType: string, filename: string | Buffer | null) => {
     if (!mainWindow) return
     mainWindow.webContents.send('cct:fs-changed', {
       path: watchPath,
@@ -236,11 +238,18 @@ function startWatcher(watchPath: string) {
     })
   }
 
-  // Use recursive option on platforms that support it
   const supportsRecursive = process.platform === 'darwin' || process.platform === 'win32'
-  const watcher = fs.watch(watchPath, { recursive: supportsRecursive }, onChange)
-  watcher.on('error', () => stopWatcher())
-  watcherCleanup = () => watcher.close()
+  for (const watchPath of existingPaths) {
+    const stat = fs.statSync(watchPath)
+    const watcher = fs.watch(
+      watchPath,
+      { recursive: stat.isDirectory() && supportsRecursive },
+      (eventType, filename) => onChange(watchPath, eventType, filename),
+    )
+    watcher.on('error', () => stopWatcher())
+    watchers.push(watcher)
+  }
+  watcherCleanup = () => watchers.forEach((watcher) => watcher.close())
 }
 
 // ── Window ───────────────────────────────────────────────────────────────────
