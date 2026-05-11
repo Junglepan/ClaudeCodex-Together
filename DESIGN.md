@@ -1,17 +1,18 @@
-# CCT 设计文档
+# cc-steward 设计文档
 
-> ClaudeCodex-Together — Claude Code / Codex CLI 本地配置管理工具
+> cc-steward（ClaudeCodex-Together）— Claude Code / Codex CLI 本地配置管理工具
 
 ---
 
 ## 一、产品定位
 
-CCT 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code 和 Codex CLI 的开发者：
+cc-steward 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code 和 Codex CLI 的开发者：
 
 1. **可视化理解**两个工具的所有配置文件：路径、格式、作用、优先级、合并策略
 2. **感知当前状态**：哪些文件已存在、哪些尚未创建、各文件当前内容
 3. **管理配置文件**：在工具内直接编辑、新建、删除配置文件
 4. **工作习惯同步**：将 Claude Code 的使用风格（指令、Skills、Agents）迁移适配到 Codex
+5. **配置生效树可视化**：展示各层配置合并结果、指令加载顺序、Skills/Agents 作用域
 
 **核心约束：所有数据来自本地文件系统，不读取或上传任何远程数据。**
 
@@ -39,11 +40,11 @@ CCT 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code
 
 ### 2.3 查看先于操作（Inspect Before Write）
 
-同步流程强制经过三个阶段：
+同步流程强制经过四个阶段：
 ```
-扫描（Scan）→ 规划（Plan）→ 预演（Dry-run）→ 写入（Write）
+扫描（Scan）→ 规划（Plan）→ 预演（Dry-run）→ 写入（Execute）
 ```
-每一步都向用户展示将要发生的变化，避免意外覆盖。
+每一步都向用户展示将要发生的变化，避免意外覆盖。SyncCenter UI 以渐进式展示，各阶段结果持久显示在屏幕上。
 
 ### 2.4 保守写入（Conservative Write）
 
@@ -60,6 +61,7 @@ CCT 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  Electron Shell（可选）               │
+│   原生菜单 / fs.watch 文件监听 / context-menu IPC     │
 ├─────────────────────────────────────────────────────┤
 │           React 前端  (Vite + TypeScript)            │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────┐  │
@@ -68,12 +70,14 @@ CCT 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code
 │  │ Router   │  │  + Sidebar   │  │  + 配置定义    │  │
 │  └──────────┘  └──────────────┘  └───────────────┘  │
 │                      Zustand Store                   │
+│         （projectPath / recentProjects 持久化）        │
 ├──────────────────────────────┬──────────────────────┤
 │   API Client (src/core/api)  │   Mock Data Fallback  │
 │   fetch → /api/*             │   自动降级（无后端时）  │
 ├──────────────────────────────┴──────────────────────┤
 │           FastAPI 后端 (Python 3.11, port 8765)      │
-│  /agents  /files  /sync  /health  /meta             │
+│  /agents  /files  /sync  /config  /health  /meta    │
+│  /backup                                             │
 ├─────────────────────────────────────────────────────┤
 │                   本地文件系统                        │
 │   ~/.claude/   ~/.codex/   {project}/               │
@@ -87,7 +91,7 @@ CCT 是一个**本地桌面配置管理工具**，帮助同时使用 Claude Code
 | React 18 + TypeScript | UI 框架 |
 | Vite | 构建工具，开发代理 `/api` → `127.0.0.1:8765` |
 | Tailwind CSS | 样式，自定义设计 Token（`surface`、`text`、`accent`、`status`） |
-| Zustand | 全局状态（projectPath、agentFiles、selectedFile） |
+| Zustand | 全局状态（projectPath、recentProjects、sidebarCollapsed、theme） |
 | React Router v6 | 客户端路由，模块动态注册路由 |
 | Lucide React | 图标库 |
 
@@ -139,6 +143,40 @@ interface AgentDefinition {
 
 每个 `ConfigFileSpec` 描述一个配置文件：路径模板、格式、作用说明、生效原理、对应的 counterpart（用于同步关系展示）。
 
+#### Claude Code 配置文件规格（13 个）
+
+| key | 路径 | 说明 |
+|-----|------|------|
+| `global_settings` | `~/.claude/settings.json` | 全局用户设置 |
+| `global_instructions` | `~/.claude/CLAUDE.md` | 全局指令文件 |
+| `global_agents` | `~/.claude/agents/` | 全局自定义 Agents 目录 |
+| `global_commands` | `~/.claude/commands/` | 全局自定义斜杠命令目录 |
+| `global_plugins` | `~/.claude/plugins/installed_plugins.json` | 已安装插件列表 |
+| `global_auth` | `~/.claude.json` | 全局认证信息 |
+| `global_mcp` | `~/.claude/mcp.json` | 全局 MCP 服务器配置 |
+| `project_settings` | `.claude/settings.json` | 项目级设置 |
+| `project_settings_local` | `.claude/settings.local.json` | 项目本地设置（不加入 VCS） |
+| `project_instructions` | `CLAUDE.md` | 项目指令文件 |
+| `project_agents` | `.claude/agents/` | 项目级自定义 Agents 目录 |
+| `project_commands` | `.claude/commands/` | 项目级自定义斜杠命令目录 |
+| `project_mcp` | `.claude/mcp.json` | 项目级 MCP 服务器配置 |
+
+#### Codex CLI 配置文件规格（11 个）
+
+| key | 路径 | 说明 |
+|-----|------|------|
+| `global_config` | `~/.codex/config.yaml` | 全局配置（模型、行为） |
+| `global_instructions` | `~/.codex/AGENTS.md` | 全局指令文件 |
+| `global_skills` | `~/.codex/skills/` | 全局 Skills 目录（原生路径） |
+| `global_memories` | `~/.codex/memories/` | 全局持久记忆目录 |
+| `global_auth` | `~/.codex/auth.json` | 全局认证信息 |
+| `global_agents` | `~/.codex/agents/` | 全局自定义 Agents 目录 |
+| `project_config` | `.codex/config.yaml` | 项目级配置 |
+| `project_instructions` | `AGENTS.md` | 项目指令文件 |
+| `project_agents` | `.codex/agents/` | 项目级自定义 Agents 目录 |
+| `project_memories` | `.codex/memories/` | 项目级记忆目录 |
+| `project_skills` | `.codex/skills/` | 项目级 Skills 目录 |
+
 ### 4.2 模块注册机制
 
 新增功能模块只需：
@@ -165,6 +203,13 @@ interface ModuleDefinition {
 ## 五、界面层次结构
 
 ```
+TitleBar
+├── 项目路径下拉选择器（ProjectSelector）
+│   ├── 当前项目文件夹名称
+│   ├── 最近项目列表（localStorage 持久化，最多 10 条）
+│   ├── Electron 原生文件夹选择器（或文本输入降级）
+│   └── 切换项目触发全局数据刷新
+
 侧边栏（一级）
 ├── 概览                    /overview
 ├── 配置管理（分组标题）
@@ -173,41 +218,49 @@ interface ModuleDefinition {
 ├── 同步中心               /sync
 └── 说明                   /help
 
-每个 Agent 页（二级）
+每个 Agent 页（二级）—— 3 个 Tab
 ├── Tab: 总览
 │   ├── 统计卡片（已存在/未创建/全局/项目）
 │   ├── 文件状态列表
 │   └── 配置关系树（Claude 专属）
-└── Tab: 配置明细
-    ├── 左侧文件树（按全局/项目分组）
-    └── 右侧文件详情（三级）
-        ├── 路径 + 格式 + 作用域
-        ├── 作用说明
-        ├── 生效原理
-        ├── 当前内容查看
-        ├── 编辑 / 新建 / 删除操作
-        └── 同步关系（counterpart）
+├── Tab: 配置明细
+│   ├── 左侧文件树（按全局/项目分组）
+│   └── 右侧文件详情（三级）
+│       ├── 路径 + 格式 + 作用域
+│       ├── 作用说明
+│       ├── 生效原理
+│       ├── 当前内容查看
+│       ├── 编辑 / 新建 / 删除操作
+│       └── 同步关系（counterpart）
+└── Tab: 配置生效树（新）
+    ├── Settings 合并结果表
+    │   └── 键名 / 生效值 / 来源层（含覆盖链）
+    ├── 指令加载顺序列表
+    ├── Skills 作用域（含同名覆盖检测）
+    └── Agents 作用域（含同名覆盖检测）
 ```
 
 ---
 
 ## 六、Claude 配置关系树
 
-Claude Code 的配置采用多层合并模型，CCT 将其可视化展示：
+Claude Code 的配置采用多层合并模型，cc-steward 将其可视化展示。
 
 ### settings.json 合并优先级（低 → 高）
 
 ```
-① 内置默认值      （Claude Code 二进制内部）
+① 内置默认值         （Claude Code 二进制内部）
     ↓
-② 全局用户配置    ~/.claude/settings.json
+② 全局用户配置       ~/.claude/settings.json
     ↓
-③ 项目配置        .claude/settings.json
+③ 项目配置           .claude/settings.json
     ↓
-④ 命令行参数      --config / --model（会话级，最高优先）
+④ 项目本地配置       .claude/settings.local.json（不加入 VCS）
+    ↓
+⑤ 命令行参数         --config / --model（会话级，最高优先）
 ```
 
-合并策略：同字段高优先级覆盖低优先级；`hooks`、`permissions` 数组按层合并追加。
+合并策略：同字段高优先级覆盖低优先级；`hooks`、`permissions` 数组按层合并追加。`settings.local.json` 作为独立层位于项目配置与 CLI 参数之间，用于存放本机专属覆盖（不提交到版本控制）。
 
 ### CLAUDE.md 加载顺序（全部加载，拼接注入）
 
@@ -221,31 +274,86 @@ Claude Code 的配置采用多层合并模型，CCT 将其可视化展示：
 
 | 层级 | 路径 | 说明 |
 |------|------|------|
-| 全局 Skills | `~/.claude/skills/` | 所有项目可用 |
+| 全局 Agents | `~/.claude/agents/` | 所有项目可用 |
 | 项目 Agents | `.claude/agents/` | 项目专属，同名覆盖全局 |
+| 全局 Commands | `~/.claude/commands/` | 所有项目可用的斜杠命令 |
+| 项目 Commands | `.claude/commands/` | 项目专属斜杠命令，同名覆盖全局 |
 
 ---
 
-## 七、同步策略
+## 七、后端 API
 
-### 可同步项（工作习惯层）
+### 7.1 端点总览
+
+后端路由在 `backend/main.py` 中注册，端口 `127.0.0.1:8765`：
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/meta` | GET | 工具版本、环境信息 |
+| `/agents` | GET | 已注册 Agent 列表及配置文件规格 |
+| `/files/meta` | GET | 单个配置文件元数据及内容 |
+| `/files/write` | POST | 写入配置文件 |
+| `/files/delete` | DELETE | 删除配置文件 |
+| `/sync/scan` | POST | 阶段 1：原始扫描（不转换） |
+| `/sync/plan` | POST | 阶段 2：扫描 + 转换，返回 warnings |
+| `/sync/dry-run` | POST | 阶段 3：扫描 + 转换 + 写入（dry_run=True） |
+| `/sync/execute` | POST | 阶段 4：实际写入 |
+| `/config/resolved` | GET | 合并后配置树（见 7.2） |
+| `/backup` | POST/GET | 配置备份与恢复 |
+
+### 7.2 /config/resolved 端点
+
+```
+GET /config/resolved?agent=claude&project=/path/to/project
+```
+
+返回内容：
+- `settings_merge`：各层 settings.json 合并结果，每个键附带来源层及覆盖链
+- `instruction_load_order`：CLAUDE.md / AGENTS.md 加载顺序列表
+- `skills_scope`：Skills 作用域及同名覆盖检测结果
+- `agents_scope`：Agents 作用域及同名覆盖检测结果
+
+前端 `ResolvedConfigTab` 组件消费此端点，在"配置生效树"Tab 中展示。
+
+---
+
+## 八、同步策略
+
+### 8.1 四阶段同步流程
+
+```
+POST /sync/scan     → 阶段 1：原始扫描（不做转换）
+POST /sync/plan     → 阶段 2：扫描 + 转换，返回 warnings
+POST /sync/dry-run  → 阶段 3：扫描 + 转换 + 写入（dry_run=True，预览变化）
+POST /sync/execute  → 阶段 4：实际写入目标文件
+```
+
+SyncCenter UI 以渐进式 4 阶段流程展示，每个阶段完成后结果持久显示在屏幕上，用户可逐阶段确认再继续。
+
+### 8.2 可同步项（工作习惯层）
 
 | Claude 源 | Codex 目标 | 转换规则 |
 |-----------|-----------|---------|
 | `CLAUDE.md` | `AGENTS.md` | 内容复制，清洗 Claude 专属语法（斜杠命令引用等） |
-| `~/.claude/skills/<name>/SKILL.md` | `~/.agents/skills/<name>.md` | frontmatter 适配 |
+| `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | 同上，全局层 |
+| `~/.claude/skills/<name>/` | `~/.codex/skills/<name>/` | frontmatter 适配，写入 Codex 原生 skills 路径 |
 | `.claude/agents/<name>.md` | `.codex/agents/<name>.md` | frontmatter 适配，tools 列表转换 |
 
-### 不同步项（基础设施层）
+### 8.3 不同步项（基础设施层 / 不支持项）
 
-- Hooks（`SessionStart`、`Stop` 等 Codex 不支持）
-- MCP 服务器配置
-- 模型设置
-- 认证信息（`.claude.json`）
+| 条目 | 状态 | 原因 |
+|------|------|------|
+| Hooks（SessionStart、Stop 等） | `unsupported` | Codex 无对应机制 |
+| MCP 服务器配置 | 不同步 | 工具专属 |
+| 模型设置 | 不同步 | 工具专属 |
+| 认证信息（`.claude.json`） | 不同步 | 安全约束 |
+| Commands（全局/项目） | `unsupported` | Codex 无等价斜杠命令机制 |
+| `settings.local.json` | 排除 | 本机专属，不纳入同步 |
 
 ---
 
-## 八、文件 CRUD 操作
+## 九、文件 CRUD 操作
 
 | 操作 | 前端行为 | 后端接口 |
 |------|----------|---------|
@@ -260,49 +368,105 @@ Claude Code 的配置采用多层合并模型，CCT 将其可视化展示：
 
 ---
 
-## 九、项目结构
+## 十、Electron 原生功能
+
+cc-steward 支持以 Electron 桌面应用模式运行，提供以下原生能力：
+
+### 10.1 原生应用菜单
+
+通过 `Menu.buildFromTemplate` 构建完整原生菜单：
+
+| 菜单 | 内容 |
+|------|------|
+| 文件 | 打开项目、切换项目、退出 |
+| 编辑 | 撤销/重做/复制/粘贴等标准编辑操作 |
+| 视图 | 重载、开发工具、缩放控制 |
+| 窗口 | 最小化、最大化、全屏切换 |
+| 帮助 | 关于、文档链接 |
+
+### 10.2 文件系统监听
+
+`electron/main.ts` 使用 Node.js `fs.watch` 监听当前 `projectPath`：
+- 检测到配置文件变动时，通过 IPC 通知渲染进程
+- 渲染进程自动触发数据刷新，保持界面与磁盘状态同步
+- 切换项目时旧监听器销毁，新监听器建立
+
+### 10.3 IPC Bridge
+
+`electron/preload.ts` 提供完整 IPC Bridge，暴露给渲染进程的接口包括：
+
+| IPC 事件 | 方向 | 说明 |
+|----------|------|------|
+| `cct:show-context-menu` | 渲染 → 主 | 触发原生右键菜单 |
+| `cct:watch-path` | 渲染 → 主 | 注册文件系统监听路径 |
+| `cct:fs-changed` | 主 → 渲染 | 文件变动通知 |
+| `cct:open-folder-dialog` | 渲染 → 主 | 打开原生文件夹选择对话框 |
+
+### 10.4 状态持久化
+
+以下状态持久化到 `localStorage`：
+
+| 键 | 类型 | 说明 |
+|----|------|------|
+| `projectPath` | `string` | 当前项目路径 |
+| `recentProjects` | `string[]` | 最近项目列表（最多 10 条） |
+| `sidebarCollapsed` | `boolean` | 侧边栏折叠状态 |
+| `theme` | `string` | 界面主题 |
+
+---
+
+## 十一、项目结构
 
 ```
 ClaudeCodex-Together/
 ├── src/
 │   ├── agents/              Agent 定义层
-│   │   ├── claude.ts        Claude Code 8 个配置文件规格
-│   │   ├── codex.ts         Codex CLI 10 个配置文件规格
-│   │   └── index.ts         注册入口
+│   │   ├── claude.ts        Claude Code 13 个配置文件规格
+│   │   ├── codex.ts         Codex CLI 11 个配置文件规格
+│   │   └── index.ts
 │   ├── core/
 │   │   ├── agent-registry.ts
 │   │   ├── module-registry.ts
-│   │   ├── api.ts            API 客户端 + mock 降级
-│   │   └── mock-data.ts      完整演示数据
-│   ├── modules/              功能模块
-│   │   ├── overview/         全局概览
-│   │   ├── agent-config/     per-agent 配置页 + 关系树
-│   │   ├── sync/             同步中心
-│   │   └── help/             说明文档
-│   ├── components/layout/    AppShell / Sidebar / TitleBar
-│   └── store/                Zustand 全局状态
+│   │   ├── api.ts            API 客户端（含 ApiResolvedConfig 等新类型）
+│   │   └── mock-data.ts
+│   ├── modules/
+│   │   ├── overview/         全局概览（双 Agent 卡片 + 对比表 + 同步状态）
+│   │   ├── agent-config/     per-agent 配置页（总览/配置明细/配置生效树 3 tabs）
+│   │   ├── sync/             同步中心（4 阶段渐进式 UI）
+│   │   └── help/
+│   ├── components/
+│   │   ├── layout/           AppShell / Sidebar / TitleBar（含 ProjectSelector）
+│   │   └── ui/               ProjectSelector, Badges, Skeleton 等
+│   └── store/                Zustand（projectPath/recentProjects 持久化）
 ├── backend/
-│   ├── main.py               FastAPI 入口，CORS，路由挂载
+│   ├── main.py               FastAPI 入口
 │   ├── core/
-│   │   ├── agents/           Python Agent 实现（与前端镜像）
-│   │   ├── scanner.py        本地文件扫描
-│   │   ├── converter.py      配置格式转换
+│   │   ├── agents/           claude.py / codex.py（与前端定义镜像）
+│   │   ├── scanner.py        扫描（含 commands 目录）
+│   │   ├── converter.py      配置转换（附 warnings）
 │   │   └── writer.py         安全写入
-│   └── api/routers/          agents / files / sync
-├── scripts/
-│   └── screenshot*.mjs       Playwright 截图脚本
-└── electron/                 桌面壳（可选）
+│   └── api/routers/          agents / files / sync（4路由）/ config / backup
+├── electron/
+│   ├── main.ts               原生菜单 / fs.watch / context-menu IPC
+│   └── preload.ts            完整 IPC bridge（含 showContextMenu/watchPath/onFsChanged）
+└── docs/
+    ├── ROADMAP.md
+    └── IMPLEMENTATION.md
 ```
 
 ---
 
-## 十、后续扩展方向
+## 十二、后续扩展方向
 
-| 方向 | 说明 |
-|------|------|
-| 更多 Agent 支持 | Cursor、Windsurf、Gemini CLI — 实现 AgentDefinition 即可接入 |
-| 双向 diff 视图 | 对比 Claude 和 Codex 同类文件的内容差异 |
-| 会话管理 | 查看历史会话记录、成本统计 |
-| 配置模板库 | 社区共享的 CLAUDE.md / AGENTS.md 模板 |
-| 自动同步触发 | 监听文件变动，自动提示同步 |
-| 多项目切换 | 快速切换当前管理的项目目录 |
+| 方向 | 状态 | 说明 |
+|------|------|------|
+| 多项目切换 | ✅ 已实现 | TitleBar ProjectSelector，最近项目持久化 |
+| 自动同步触发 | ✅ 已实现 | Electron fs.watch 监听文件变动 → 自动刷新 |
+| 更多 Agent 支持 | 规划中 | Cursor、Windsurf、Gemini CLI — 实现 AgentDefinition 即可接入 |
+| 双向 diff 视图 | 规划中 | 对比 Claude 和 Codex 同类文件的内容差异 |
+| 会话管理 | 规划中 | 查看历史会话记录、成本统计 |
+| 配置模板库 | 规划中 | 社区共享的 CLAUDE.md / AGENTS.md 模板 |
+
+---
+
+> 最后更新：2026-05-11

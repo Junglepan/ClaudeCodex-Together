@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List, GitMerge } from 'lucide-react'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
@@ -9,6 +9,7 @@ import { ClaudeRelTree } from './ClaudeRelTree'
 import { ResolvedConfigTab } from './ResolvedConfigTab'
 import { StatusBadge, ScopeBadge, FormatBadge } from '@/components/ui/Badges'
 import { EmptyState } from '@/components/ui/Skeleton'
+import { electronApi, isElectron } from '@/lib/electron-bridge'
 
 interface SelectedFile {
   agentId: string
@@ -305,6 +306,42 @@ function FileGroup({
   onSelect: (f: SelectedFile | null) => void
 }) {
   const [open, setOpen] = useState(true)
+  const { pushToast } = useAppStore()
+
+  const handleContextMenu = useCallback(async (e: React.MouseEvent, file: ApiConfigFile) => {
+    e.preventDefault()
+    if (!isElectron) return
+
+    const menuItems = [
+      { label: '查看详情', action: 'select', enabled: true },
+      { label: '---', action: '' },
+      { label: '在 Finder 中显示', action: 'reveal', enabled: file.exists },
+      { label: '在终端中打开', action: 'terminal', enabled: file.exists && file.kind === 'dir' },
+      { label: '---', action: '' },
+      { label: '复制路径', action: 'copy' },
+    ]
+
+    const action = await electronApi.showContextMenu(menuItems)
+    if (!action) return
+
+    if (action === 'select') {
+      onSelect({ agentId, fileKey: file.key, path: file.path })
+    } else if (action === 'reveal') {
+      electronApi.revealInFinder(file.path).catch((err) =>
+        pushToast({ kind: 'error', message: String(err) }),
+      )
+    } else if (action === 'terminal') {
+      electronApi.openInTerminal(file.path).catch((err) =>
+        pushToast({ kind: 'error', message: String(err) }),
+      )
+    } else if (action === 'copy') {
+      navigator.clipboard.writeText(file.path).catch(() => {
+        pushToast({ kind: 'error', message: '无法写入剪贴板' })
+      })
+      pushToast({ kind: 'success', message: '已复制路径' })
+    }
+  }, [agentId, onSelect, pushToast])
+
   if (files.length === 0) return null
 
   return (
@@ -326,6 +363,7 @@ function FileGroup({
               <button
                 key={file.key}
                 onClick={() => onSelect({ agentId, fileKey: file.key, path: file.path })}
+                onContextMenu={(e) => handleContextMenu(e, file)}
                 className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg mx-2 text-left transition-colors ${
                   isSelected
                     ? 'bg-accent-blue/10 text-accent-blue'
