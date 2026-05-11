@@ -96,14 +96,99 @@
 
 ---
 
-## 模块 D：概览页（Overview）改进
+## 模块 D：概览页（Overview）重新设计
 
-- [ ] **D-1** 对照表补充新增配置项
-  - 将 `global_instructions`、`global_agents`、`global_commands`、`project_commands` 加入 COMPARISON_ROWS
-  - 更新分组标签：区分"指令层"、"扩展层"、"基础设施层"
+> **问题背景**
+>
+> 当前概览存在三个结构性问题：
+> 1. Agent 卡片只显示"X 个文件存在 / Y 个未创建"——纯数字，无可操作性，用户不知道缺失的是什么、是否重要
+> 2. 配置对照表使用"工作习惯层 / 基础设施层"等内部术语，绿点/灰点语义不足；对比的意义（是要同步？有差距？）从未说清楚
+> 3. "当前生效"侧边栏页与概览内容高度重叠，两个页面说同一件事，分散理解
+>
+> **概览应回答的三个核心问题**
+> 1. 我的配置健康吗？— 关键文件是否缺失
+> 2. 当前项目是什么状态？— 有没有项目配置、配置了什么
+> 3. 有什么需要关注的？— 差距在哪、可以做什么
 
-- [ ] **D-2** Agent 状态卡片显示插件数量
-  - 读取 `installed_plugins.json`，在 Claude 卡片上展示"已安装 N 个插件"
+### D-1 Agent 状态卡片重构（全局 + 项目分组）
+
+- [ ] **D-1-1** 卡片内部结构改为两段：全局层 + 项目层
+
+  **目标视觉结构（双列并排）：**
+  ```
+  Claude Code                          Codex CLI
+  ───────────────────────              ───────────────────────
+  全局
+  ✓ 指令    ~/.claude/CLAUDE.md        ✓ 指令    ~/.codex/AGENTS.md
+  ✓ 技能    25 个 skills               ✗ 技能    未配置
+  ✓ Agents  4 个                       ✓ Agents  4 个
+  ✓ 设置    settings.json             ✓ 设置    config.toml
+  ✓ 命令    12 个 commands             ─  (无等价机制)
+  ───────────────────────              ───────────────────────
+  当前项目: ClaudeCodex-Together        (来自 J 模块 projectPath)
+  ✓ CLAUDE.md                          ✗ AGENTS.md   未同步
+  ✓ .claude/agents/                    ✓ .codex/agents/
+  ✗ .mcp.json                          ─
+  ```
+
+  - 全局层：固定展示全局指令 / 技能 / Agents / 设置 / 命令五类，每类对应最重要的那一个路径或数量
+  - 项目层：仅当 `projectPath` 非 null 时展示；无项目时显示"未选择项目 — 点击顶部选择器选择"灰色提示
+  - 状态语义：
+    - `✓ 绿色`：文件/目录存在
+    - `✗ 红色 + 标签`：不存在，标签说明影响（"未配置"、"未同步"、"建议创建"）
+    - `─ 灰色`：该 agent 无此机制，不适用
+
+- [ ] **D-1-2** 去掉纯数字汇总行（"5 个文件已存在 / 3 个未创建"）
+  - 替换为：如果有任何关键文件缺失，在卡片底部展示一条橙色警示行，如"⚠ 当前项目 AGENTS.md 未同步"
+  - 如果全部关键文件存在，展示绿色"✓ 配置完整"
+
+- [ ] **D-1-3** 关键文件的定义（哪些缺失需要警告）
+  - Claude 全局：`~/.claude/CLAUDE.md`、`~/.claude/settings.json`
+  - Codex 全局：`~/.codex/AGENTS.md`、`~/.codex/config.toml`
+  - 项目层（如果有项目）：`CLAUDE.md` 和 `AGENTS.md` 是配对文件，其中一个存在另一个不存在时，标注"未同步"
+  - 非关键文件（技能/Agents/命令）：缺失时展示但不触发警告
+
+### D-2 配置对照表重构（同步对齐视图）
+
+- [ ] **D-2-1** 移除"工作习惯层 / 基础设施层"分组标签
+  - 改用用户能理解的分类：**指令 / 技能 / Agent / 设置 / 命令**
+  - 每个分类行对应：该功能在 Claude 侧和 Codex 侧各自的文件/目录
+
+- [ ] **D-2-2** 对照表增加"同步状态"列，说明对比的语义
+  - 列头：`功能` | `Claude` | `Codex` | `同步状态`
+  - 同步状态取值：
+    - `✓ 已对齐`：两侧都存在
+    - `→ 可迁移`：仅 Claude 侧存在，内容可迁移到 Codex 侧
+    - `← 待引入`：仅 Codex 侧存在，未同步到 Claude 侧
+    - `✗ 均未配置`：两侧都不存在（不关键则灰色静默，关键则橙色提示）
+    - `─ 仅适用于 Claude`：该功能 Codex 无等价机制
+  - 这一列让用户理解"对比"的目的是检查 Claude ↔ Codex 配置是否对齐，而非仅展示存不存在
+
+- [ ] **D-2-3** 对照表新增 A-1 / I-2 模块补充的配置项
+  - 加入 `global_instructions`（CLAUDE.md ↔ AGENTS.md）
+  - 加入 `global_agents`（~/.claude/agents/ ↔ ~/.codex/agents/）
+  - 加入 `global_commands`（~/.claude/commands/ — 仅 Claude，标"─"）
+  - 去掉`stop_hook` 行（A-2-1 移除后同步删除）
+
+### D-3 合并"当前生效"页面
+
+- [ ] **D-3-1** 将 `active-config`（`/active-config`）页面内容迁移进概览
+  - 两个页面当前都展示"哪些文件存在"，信息高度重叠
+  - 迁移方式：概览新增一个可折叠的"文件清单"区域（默认折叠），内容等同于当前 active-config 页
+  - 迁移完成后，`activeConfigModule` 从导航彻底隐藏（已是 `showInNav: false`，确认无直接入口链接后可保留路由备用）
+
+- [ ] **D-3-2** `pathMappingModule`（`/path-mapping`）同步评估
+  - 检查该页面与概览是否也有重叠；若是，一并纳入概览或合并入某个 agent 配置页的"路径说明"区块
+
+### D-4 数据层对接（依赖 J 模块）
+
+- [ ] **D-4-1** 概览使用 `projectPath`（来自 Zustand store，J-2-1 新增）
+  - 当 `projectPath` 为 null 时：项目层区域显示"未选择项目"占位提示，对照表只展示全局行
+  - 当 `projectPath` 有值时：额外拉取该项目下的文件 meta，填充项目层状态
+
+- [ ] **D-4-2** 数据请求优化
+  - 概览所需数据：`GET /files/meta` 批量（或复用 `useAgentFiles` hook）
+  - 避免为每个文件单独发请求；如有必要在后端新增 `GET /files/batch-meta?agent=claude&keys=k1,k2,...`（低优先级，可先用并发请求暂代）
 
 ---
 
