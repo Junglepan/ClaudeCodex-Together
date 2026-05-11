@@ -761,3 +761,259 @@ K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store
 ---
 
 *最后更新：2026-05-11*
+
+---
+
+## 模块 Q：规范符合度修正（官方行为对齐）
+
+> 来源：对当前实现与 Claude Code / Codex CLI 官方规范的逐项比对。  
+> 三类问题：说明文字误导、文件格式识别错误、数组字段合并逻辑错误。
+
+### Q-1 指令加载描述文字修正（低风险）
+
+> 影响文件：`src/modules/agent-config/ResolvedConfigTab.tsx`
+
+**根因**：CLAUDE.md / AGENTS.md 的实际行为是所有层级**全部拼接注入**上下文，不存在"后者覆盖前者"的关系。当前两处文字描述均有误导。
+
+- [ ] **Q-1-1** 修正 `InstructionsSection` 的 `hint` 文字（第 130 行）
+  ```
+  旧：hint="Markdown 指令文件按优先级依次注入，后者可覆盖前者"
+  新：hint="所有层级全部拼接注入，全局与项目指令同时生效，不存在覆盖"
+  ```
+
+- [ ] **Q-1-2** 修正页面顶部描述（第 46 行）
+  ```
+  旧："当前实际生效的配置合并结果，按优先级从低到高展示覆盖关系"
+  新："当前实际生效的配置合并结果：settings 字段后者覆盖前者，指令文件全部拼接"
+  ```
+
+---
+
+### Q-2 Codex agents 文件格式修正（低风险）
+
+> 影响文件：`backend/api/routers/config.py`
+
+**根因**：`_resolve_codex` 函数扫描 `~/.codex/agents/` 时用 `.endswith(".md")` 过滤，但 Codex agent 文件格式为 `.toml`，导致发现结果永远为空。
+
+- [ ] **Q-2-1** 修正 `_resolve_codex` 中 agents 目录的扫描后缀（第 206-207 行）
+  ```python
+  # 旧（错误）
+  global_agent_names  = {p[:-3] for p in _dir_entries(global_agents_dir)  if p.endswith(".md")}
+  project_agent_names = {p[:-3] for p in _dir_entries(project_agents_dir) if p.endswith(".md")} ...
+
+  # 新（正确）
+  global_agent_names  = {p[:-5] for p in _dir_entries(global_agents_dir)  if p.endswith(".toml")}
+  project_agent_names = {p[:-5] for p in _dir_entries(project_agents_dir) if p.endswith(".toml")} ...
+  ```
+  注：Claude agents 侧（第 116-117 行）保持 `.md` + `[:-3]` 不变。
+
+---
+
+### Q-3 settings 数组字段追加合并（中风险）
+
+> 影响文件：`backend/api/routers/config.py`、`src/core/api.ts`、`src/modules/agent-config/ResolvedConfigTab.tsx`
+
+**根因**：当前 `_resolve_claude` 对所有 key 统一使用 last-wins 覆盖。官方规范中 `hooks`、`permissions` 字段是**各层追加合并**（全局 hooks 列表 + 项目 hooks 列表 = 最终列表），标量字段才是后者覆盖前者。
+
+#### Q-3-1 后端：按字段类型分支处理
+
+修改 `_resolve_claude` 的 settings 合并逻辑：
+
+```python
+ARRAY_MERGE_KEYS = {"hooks", "permissions"}
+
+layers = [
+    ("global",        global_data),
+    ("project",       project_data),
+    ("local_override", local_data),
+]
+
+settings_rows = []
+all_keys = set(global_data) | set(project_data) | set(local_data)
+for key in sorted(all_keys):
+    layers_with_key = [(src, data[key]) for src, data in layers if key in data]
+
+    if key in ARRAY_MERGE_KEYS:
+        # 数组字段：各层拼接，source 标为 "merged"
+        merged = []
+        for _, val in layers_with_key:
+            if isinstance(val, list):
+                merged.extend(val)
+        value      = merged
+        source     = "merged" if len(layers_with_key) > 1 else layers_with_key[0][0]
+        overrides  = []  # 追加不是覆盖，无需标 overrides
+    else:
+        # 标量字段：last-wins（现有逻辑）
+        sources = [src for src, _ in layers_with_key]
+        value   = layers_with_key[-1][1]
+        source  = sources[-1]
+        overrides = sources[:-1] if len(sources) > 1 else []
+
+    val_str = json.dumps(value, ensure_ascii=False)
+    if len(val_str) > 80:
+        val_str = val_str[:77] + "…"
+    settings_rows.append({
+        "key":      key,
+        "value":    val_str,
+        "source":   source,
+        "overrides": overrides,
+    })
+```
+
+#### Q-3-2 前端类型：`source` 补充 `'merged'`
+
+修改 `src/core/api.ts` 中 `ResolvedSettingsRow`：
+
+```typescript
+// 旧
+source: 'global' | 'project' | 'local_override'
+
+// 新
+source: 'global' | 'project' | 'local_override' | 'merged'
+```
+
+#### Q-3-3 前端 UI：`SourceBadge` 加 `merged` 分支
+
+修改 `src/modules/agent-config/ResolvedConfigTab.tsx` 中 `SourceBadge`：
+
+```typescript
+const map = {
+  global:         { label: '全局',     cls: 'bg-accent-blue/10 text-accent-blue' },
+  project:        { label: '项目',     cls: 'bg-accent-green/10 text-accent-green' },
+  local_override: { label: '本地覆盖', cls: 'bg-accent-orange/10 text-accent-orange' },
+  merged:         { label: '多层合并', cls: 'bg-purple-100 text-purple-700' },
+}
+```
+
+合并后的 hooks / permissions 行展示效果：
+```
+键            生效值                      来源
+────────────────────────────────────────────────────
+hooks         [{"event":"Stop",...}, ...]  [多层合并]
+permissions   ["Bash","Read","Write"]      [多层合并]
+model         "claude-opus-4-5"            [项目] → 全局
+```
+
+---
+
+### Q-3 实施顺序
+
+```
+第一批（无逻辑风险，直接做）
+  Q-1-1 + Q-1-2  hint 文字修正
+  Q-2-1           Codex agents 后缀
+
+第二批（后端逻辑变更，需验证）
+  Q-3-1           后端数组合并（建议手动测试：构造含 hooks 的 global+project settings.json，
+                  验证 merged 结果长度 = 两层之和，顺序为全局在前）
+  Q-3-2           前端类型补充
+  Q-3-3           SourceBadge UI
+```
+
+---
+
+## 模块 P：项目发现体验完善
+
+> 来源：J-1 后端接口实现后的体验后续——初次打开为空、排序无依据、home 目录被误设为项目。
+
+### P-1 /meta 不再强制 home 为项目
+
+> 影响文件：`backend/main.py`、`src/App.tsx`
+
+**根因**：当前无 env var 时 `/meta` 回退到 `Path.home()`，前端将 home 目录设为 `projectPath`，ProjectSelector 显示错误的"当前项目"。
+
+- [ ] **P-1-1** `/meta` 无 env var 时 `project_path` 返回 `null`（或不含该字段）
+  ```python
+  # 旧
+  if not project_path:
+      project_path = str(Path.home())
+
+  # 新
+  # project_path 保持 None，返回体中不含该字段或值为 null
+  ```
+
+- [ ] **P-1-2** 前端 `App.tsx` 已有 `if (d.project_path) setProjectPath(d.project_path)` 条件判断，无需改动；确认 `projectPath` 初始值为 `undefined` 时 ProjectSelector 显示"未选择项目"。
+
+---
+
+### P-2 /projects 加 last_used 排序依据
+
+> 影响文件：`backend/api/routers/projects.py`
+
+**根因**：当前 `/projects` 返回列表只按 `exists`、`name` 排序，用户最近使用的项目不一定排在最前。
+
+- [ ] **P-2-1** Claude 侧：取 `~/.claude/projects/<dir>` 的 `mtime` 作为 `last_used`
+  ```python
+  last_used = entry.stat().st_mtime  # Unix timestamp
+  ```
+
+- [ ] **P-2-2** Codex 侧：暂设 `last_used = None`（config.toml 不记录访问时间）
+
+- [ ] **P-2-3** 合并结果按 `last_used` 降序排列，`None` 排末尾；同路径 claude+codex 取较大值
+
+- [ ] **P-2-4** 响应结构加 `last_used` 字段，前端 `ApiProject` 接口同步更新
+  ```typescript
+  export interface ApiProject {
+    path: string
+    name: string
+    exists: boolean
+    source: 'claude' | 'codex' | 'both'
+    last_used: number | null  // Unix timestamp，null 表示未知
+  }
+  ```
+
+---
+
+### P-3 ProjectSelector 初次使用引导
+
+> 影响文件：`src/components/ui/ProjectSelector.tsx`
+
+**根因**：首次使用时 `discovered` 为空（后端暂未发现任何项目），下拉面板只有"选择文件夹"按钮，无任何引导。
+
+- [ ] **P-3-1** 无发现结果且无 recents 时，显示引导文案
+  ```
+  未自动发现项目
+  请点击"选择文件夹"指定项目目录，
+  或确保已使用过 Claude Code / Codex CLI。
+  ```
+
+- [ ] **P-3-2** 有发现结果时，`last_used` 最近的项目加"上次使用"标签（非自动切换，只是视觉提示）
+  ```
+  已识别项目
+  ● my-project    [Claude+Codex]  上次使用 ←
+  ● api-server    [Claude]
+  ```
+
+---
+
+## 模块 H-1：ClaudeRelTree 静态知识迁移
+
+> 当前状态：ClaudeRelTree 仍在 AgentConfigPage OverviewTab（第 172 行），总览 Tab 混合了状态数据与静态知识。
+
+- [ ] **H-1-1** 帮助页新增"配置机制"章节
+  - 在 `src/modules/help/Help.tsx` 现有章节后增加 section，标题"Claude Code 配置关系与优先级"
+  - 直接渲染 `<ClaudeRelTree />`，或将其内容展开为帮助页风格静态说明块
+
+- [ ] **H-1-2** AgentConfigPage OverviewTab 移除 ClaudeRelTree
+  - 删除 `agentId === 'claude'` 下的 ClaudeRelTree 整个卡片（约 12 行）
+  - OverviewTab 回归纯状态快照：统计卡片 + 文件状态列表
+
+- [ ] **H-1-3** ResolvedConfigTab 顶部加静态知识入口
+  - 在页面右上角加 `查看配置合并原理 →` 链接，`navigate('/help')` 并带锚点 `#config-mechanism`
+
+---
+
+## 新模块执行顺序建议
+
+```
+Q-1 + Q-2（纯文字 + 2 行改动，零风险，优先做）
+     ↓
+Q-3（后端逻辑 → 前端类型 → UI，按顺序，中等风险）
+     ↓
+P-1（/meta null 回退，影响首次体验，尽早做）
+P-3（ProjectSelector 引导，依赖 P-1 完成后验证）
+     ↓
+P-2（/projects 排序，锦上添花，低优先）
+     ↓
+H-1（ClaudeRelTree 迁移，独立，随时可做）
+```
