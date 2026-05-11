@@ -74,8 +74,16 @@
 > 依赖 A-1 完成后执行
 
 - [ ] **C-1** `ClaudeRelTree` 更新 settings.json 合并优先级图
-  - 在"项目配置"与"命令行参数"之间插入"本地覆盖"层（settings.local.json）
-  - 合并顺序变为：内置默认 → 全局 → 项目 → **本地覆盖** → CLI 参数
+  - `settings.local.json` 改变的是**层次结构本身**，而非某层内部的合并规则
+  - 正确的五层顺序（低 → 高）：
+    ```
+    内置默认值          ← 最低
+    全局用户配置        ← ~/.claude/settings.json
+    项目配置            ← .claude/settings.json
+    项目本地覆盖        ← .claude/settings.local.json  ← 新增层
+    命令行参数          ← 最高（会话级）
+    ```
+  - 注意：`settings.local.json` 位于"项目配置之上、CLI 参数之下"，是独立的一层，不是项目配置的补充
 
 - [ ] **C-2** `ClaudeRelTree` 更新 CLAUDE.md 加载顺序图
   - 第 1 条改为 `~/.claude/CLAUDE.md`（全局）
