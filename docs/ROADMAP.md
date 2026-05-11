@@ -259,6 +259,141 @@
 
 ---
 
+## 模块 J：项目路径选择（Project Context Selector）
+
+> 当前所有 API 调用都可以接受 `?project=<path>` 参数，但前端没有提供选择当前工作项目的入口。  
+> 本模块为 cc-steward 提供"当前项目上下文"，让配置明细、生效树等视图都基于所选项目展示。
+
+### J-1 后端：项目列表接口
+
+- [ ] **J-1-1** 新增 `GET /projects` 端点（`backend/api/routers/projects.py`）
+
+  **返回结构：**
+  ```json
+  [
+    {
+      "path": "/Users/alice/my-project",
+      "exists": true,
+      "source": "claude",
+      "last_used": "2026-05-10T14:32:00"
+    },
+    {
+      "path": "/Users/alice/work/api",
+      "exists": true,
+      "source": "codex",
+      "last_used": null
+    }
+  ]
+  ```
+  - `source`: `"claude"` | `"codex"` | `"both"`（同一路径在两侧均出现时合并为 `"both"`）
+  - `last_used`: Claude 侧取 `~/.claude/projects/<encoded>/` 目录的 `mtime`；Codex 侧暂设为 `null`
+  - 响应按 `last_used` 降序排列（`null` 排末尾）
+  - `exists`: 对应真实目录是否仍存在（路径已删除的项目仍展示，前端灰色标注）
+
+  **Claude 侧数据提取（核心算法）：**
+  - 扫描 `~/.claude/projects/` 下的所有子目录
+  - 目录名是真实路径的编码形式：路径中 `/`、`-`、`_` 均被替换为 `-`，导致解码有歧义
+  - 解码算法（回溯法）：将编码名中每个 `-` 视为分隔点，枚举将其还原为 `/`、`-` 或 `_` 的所有组合，对每个候选路径调用 `os.path.exists()` 验证。实测在用户机器上 19/21 成功率，失败的两个案例都是已删除的项目目录
+  - 实现位置：`backend/core/agents/claude.py` 中新增 `decode_project_path(encoded: str) -> str | None`；`projects.py` 路由调用此函数
+  - 注意：路径解码失败时不丢弃，而是以 `path=None`、`exists=False` 形式返回，前端可展示"路径未知（已删除？）"
+
+  **Codex 侧数据提取：**
+  - 解析 `~/.codex/config.toml`（使用标准库 `tomllib` Python 3.11+，低版本用 `tomli` fallback）
+  - 读取 `[projects]` 段，其 key 即真实绝对路径（如 `[projects."/home/alice/my-project"]`），无需解码
+  - 过滤：只保留 `os.path.isdir(key)` 为真的条目（即当前仍存在的目录）
+  - 如果 `~/.codex/config.toml` 不存在，Codex 侧返回空列表，不报错
+
+  **去重合并：**
+  - 以规范化绝对路径（`os.path.realpath`）为 key 去重
+  - 同一路径同时在 Claude 和 Codex 侧存在时，`source` 设为 `"both"`，`last_used` 取两侧中较大的值
+
+- [ ] **J-1-2** 将 `projects.py` 路由注册到 `backend/api/main.py`
+  ```python
+  from api.routers import projects
+  app.include_router(projects.router)
+  ```
+
+### J-2 前端：Zustand Store 扩展
+
+- [ ] **J-2-1** 在 `src/store/index.ts`（或等价 store 文件）中增加 `projectPath` 字段
+  ```typescript
+  interface AppStore {
+    // ...existing fields...
+    projectPath: string | null
+    setProjectPath: (path: string | null) => void
+  }
+  ```
+  - 初始值 `null`（代表无项目上下文，视图展示全局配置）
+  - 持久化：将 `projectPath` 加入 `persist` 的 partialize 列表，下次启动恢复上次选中的项目
+
+- [ ] **J-2-2** 新增 `useProjects` hook（`src/hooks/useProjects.ts`）
+  ```typescript
+  export function useProjects() {
+    // 调用 GET /api/projects，返回 { data, isLoading, error, refetch }
+    // 使用 SWR 或 React Query（项目现有依赖决定，查看 package.json 确认）
+    // 若后端不可达（mock 模式），返回空数组，不报错
+  }
+  ```
+
+### J-3 前端：TitleBar 项目选择器
+
+- [ ] **J-3-1** 在 `src/components/layout/TitleBar.tsx`（若不存在则新建）中，在 app title 右侧加入项目选择器
+
+  **UI 结构（示意）：**
+  ```
+  [cc-steward]  [my-project ▾]                    [─][□][✕]
+  ```
+  - 选择器文案：`projectPath` 非 null 时显示目录名（`path.basename(projectPath)`），null 时显示 `全局（无项目）`
+  - 点击后展开下拉面板（`Popover` 或自定义浮层）
+
+  **下拉面板内容：**
+  ```
+  ┌──────────────────────────────────────┐
+  │  最近使用                             │
+  │  ● my-project        [claude+codex]  │
+  │  ● api-server        [claude]        │
+  │  ○ old-project (已删除)  [claude]    │
+  │  ─────────────────────────────────── │
+  │  全局（无项目上下文）                  │
+  │  ─────────────────────────────────── │
+  │  浏览其他目录...                       │
+  └──────────────────────────────────────┘
+  ```
+  - 已删除路径（`exists: false`）灰色 + 删除线，仍可点击选中
+  - "全局"选项点击后 `setProjectPath(null)`
+  - `source` 徽章：`claude` / `codex` / `both`，用 `ScopeBadge` 组件风格
+
+- [ ] **J-3-2** "浏览其他目录..." 交互
+  - **Electron 模式**（`isElectron()` 为 true）：调用 `electronApi.openDirectoryDialog()` 触发系统 `dialog.showOpenDialog({ properties: ['openDirectory'] })`；选择后 `setProjectPath(result.filePaths[0])`
+  - **Web 模式**（非 Electron）：将"浏览..."替换为文本输入框，用户手动粘贴路径，回车确认；简单 `os.path.isdir` 校验（调用 `GET /files/meta?...` 等现有接口间接验证，或新增轻量 `GET /projects/validate?path=...`）
+  - 选中新路径后调用 `refetch()` 刷新项目列表（将新路径加入最近列表需后端记录，一期可先不实现，刷新后从 Claude/Codex 两侧重新扫描即可）
+
+### J-4 前端：projectPath 透传至所有 API 调用
+
+- [ ] **J-4-1** 审查 `src/core/api.ts` 中所有带 `project` 参数的接口调用处
+  - 当前 API 调用是否已经将 `projectPath` 从 store 中透传？确认 `AgentConfigPage` 中的 `useAgentFiles` hook 是否接受并传递 `project` 参数
+  - 若未传递：在 hook 层（`useAgentFiles`, `useAgentStatus`）读取 store 中的 `projectPath`，拼入请求 URL
+
+- [ ] **J-4-2** 配置生效树 Tab（H 模块）的 `GET /config/resolved` 接口也需透传 `project`
+  - 此项在 H 模块实现时一并处理，此处仅作提醒标注
+
+### J-5 Electron 主进程：目录选择 IPC
+
+- [ ] **J-5-1** 在主进程（`electron/main.ts` 或等价文件）注册 IPC handler
+  ```typescript
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: '选择项目目录',
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ```
+  - 先确认现有 `electron-bridge.ts` / `preload.ts` 已有 `openDirectoryDialog` 暴露，若无则一并添加
+  - `preload.ts` 中：`openDirectoryDialog: () => ipcRenderer.invoke('dialog:openDirectory')`
+
+---
+
 ## 执行顺序建议
 
 ```
@@ -275,6 +410,9 @@ I-1（Codex 错误修正）  + I-2（Codex 补充条目）
     D（概览改进）    E（同步规则）    I-3（config.toml 详情补充）
           ↓
       G（文档更新）
+
+J（项目路径选择）可独立并行，不依赖 A~I
+  J-1（后端 /projects）→ J-2（Store）→ J-3（TitleBar UI）→ J-4（透传）+ J-5（Electron IPC）
 ```
 
 ---
