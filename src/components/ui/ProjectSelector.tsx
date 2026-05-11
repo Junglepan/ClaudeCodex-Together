@@ -1,13 +1,27 @@
-import { useState, useRef, useEffect } from 'react'
-import { FolderOpen, ChevronDown, Clock, X, Check } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { FolderOpen, ChevronDown, Clock, X, Check, Loader2 } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { electronApi, isElectron } from '@/lib/electron-bridge'
 import { agentRegistry } from '@/core/agent-registry'
 import { api } from '@/core/api'
+import type { ApiProject } from '@/core/api'
 import { withColdStartRetry } from '@/lib/retry'
 
 function basename(p: string) {
   return p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p
+}
+
+function SourceBadge({ source }: { source: 'claude' | 'codex' | 'both' }) {
+  const map = {
+    claude: 'Claude',
+    codex: 'Codex',
+    both: 'Claude+Codex',
+  }
+  return (
+    <span className="text-2xs font-medium text-text-tertiary bg-surface-base border border-border-default px-1.5 py-0.5 rounded">
+      {map[source]}
+    </span>
+  )
 }
 
 export function ProjectSelector() {
@@ -20,11 +34,31 @@ export function ProjectSelector() {
   const [open, setOpen] = useState(false)
   const [inputMode, setInputMode] = useState(false)
   const [inputVal, setInputVal] = useState('')
+  const [discovered, setDiscovered] = useState<ApiProject[]>([])
+  const [loadingDiscover, setLoadingDiscover] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
+  const loadDiscovered = useCallback(async () => {
+    setLoadingDiscover(true)
+    try {
+      const list = await api.projects.list()
+      setDiscovered(list)
+    } catch {
+      // backend not available — silently ignore
+    } finally {
+      setLoadingDiscover(false)
+    }
+  }, [])
+
+  // Load discovered projects when dropdown opens
   useEffect(() => {
-    if (!open) { setInputMode(false); setInputVal('') }
-  }, [open])
+    if (open) {
+      loadDiscovered()
+    } else {
+      setInputMode(false)
+      setInputVal('')
+    }
+  }, [open, loadDiscovered])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -38,7 +72,6 @@ export function ProjectSelector() {
     setOpen(false)
     if (path === projectPath) return
     setProjectPath(path)
-    // Re-fetch all agent data for the new project
     if (refreshing) return
     setRefreshing(true)
     setError(null)
@@ -64,7 +97,7 @@ export function ProjectSelector() {
 
   const pickFolder = async () => {
     if (isElectron) {
-      const picked = await electronApi.pickDirectory(projectPath).catch(() => null)
+      const picked = await electronApi.pickDirectory(projectPath ?? undefined).catch(() => null)
       if (picked) applyProject(picked)
     } else {
       setInputMode(true)
@@ -77,7 +110,13 @@ export function ProjectSelector() {
   }
 
   const label = projectPath ? basename(projectPath) : '未选择项目'
-  const uniqueRecent = recentProjects.filter((p) => p !== projectPath).slice(0, 8)
+
+  // Discovered projects not already current, deduplicated vs recents
+  const discoveredPaths = new Set(discovered.map((d) => d.path))
+  const recentNotDiscovered = recentProjects
+    .filter((p) => p !== projectPath && !discoveredPaths.has(p))
+    .slice(0, 5)
+  const discoveredNotCurrent = discovered.filter((d) => d.path !== projectPath)
 
   return (
     <div className="relative no-drag" ref={ref}>
@@ -92,7 +131,7 @@ export function ProjectSelector() {
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-72 bg-white border border-border-default rounded-xl shadow-lg overflow-hidden animate-fade-in">
+        <div className="absolute top-full mt-1 left-0 z-50 w-80 bg-surface-card border border-border-default rounded-xl shadow-lg overflow-hidden animate-fade-in">
           {/* Current */}
           {projectPath && (
             <div className="px-3 py-2.5 border-b border-border-subtle bg-surface-base">
@@ -104,33 +143,70 @@ export function ProjectSelector() {
             </div>
           )}
 
-          {/* Recent projects */}
-          {uniqueRecent.length > 0 && (
-            <div className="py-1 border-b border-border-subtle">
-              <div className="px-3 py-1.5 flex items-center justify-between">
-                <span className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider">最近使用</span>
-                <button
-                  onClick={() => clearRecentProjects()}
-                  className="text-2xs text-text-tertiary hover:text-text-primary transition-colors flex items-center gap-0.5"
-                >
-                  <X size={9} />清除
-                </button>
-              </div>
-              {uniqueRecent.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => applyProject(p)}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-hover transition-colors text-left"
-                >
-                  <Clock size={11} className="text-text-tertiary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-text-primary truncate">{basename(p)}</div>
-                    <code className="text-2xs font-mono text-text-tertiary truncate block">{p}</code>
-                  </div>
-                </button>
-              ))}
+          {/* Discovered projects */}
+          <div className="py-1 border-b border-border-subtle max-h-56 overflow-y-auto">
+            <div className="px-3 py-1.5 flex items-center justify-between">
+              <span className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider">已识别项目</span>
+              {loadingDiscover && <Loader2 size={10} className="animate-spin text-text-tertiary" />}
             </div>
-          )}
+
+            {!loadingDiscover && discoveredNotCurrent.length === 0 && (
+              <div className="px-3 py-2 text-2xs text-text-tertiary">
+                未发现项目（来自 ~/.codex/config.toml 和 ~/.claude/projects/）
+              </div>
+            )}
+
+            {discoveredNotCurrent.map((proj) => (
+              <button
+                key={proj.path}
+                onClick={() => applyProject(proj.path)}
+                disabled={!proj.exists}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                  proj.exists
+                    ? 'hover:bg-surface-hover text-text-primary'
+                    : 'opacity-50 cursor-not-allowed text-text-tertiary'
+                }`}
+              >
+                <FolderOpen size={11} className="text-text-tertiary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium truncate">{proj.name}</span>
+                    {!proj.exists && <span className="text-2xs text-text-tertiary">(已删除)</span>}
+                  </div>
+                  <code className="text-2xs font-mono text-text-tertiary truncate block">{proj.path}</code>
+                </div>
+                <SourceBadge source={proj.source} />
+              </button>
+            ))}
+
+            {/* Recent projects not in discovered list */}
+            {recentNotDiscovered.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 flex items-center justify-between border-t border-border-subtle mt-1">
+                  <span className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider">最近使用</span>
+                  <button
+                    onClick={() => clearRecentProjects()}
+                    className="text-2xs text-text-tertiary hover:text-text-primary transition-colors flex items-center gap-0.5"
+                  >
+                    <X size={9} />清除
+                  </button>
+                </div>
+                {recentNotDiscovered.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => applyProject(p)}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-hover transition-colors text-left"
+                  >
+                    <Clock size={11} className="text-text-tertiary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-text-primary truncate">{basename(p)}</div>
+                      <code className="text-2xs font-mono text-text-tertiary truncate block">{p}</code>
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="p-2">
@@ -141,9 +217,12 @@ export function ProjectSelector() {
                   type="text"
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); if (e.key === 'Escape') setInputMode(false) }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitInput()
+                    if (e.key === 'Escape') setInputMode(false)
+                  }}
                   placeholder="/path/to/project"
-                  className="flex-1 text-xs px-2 py-1.5 border border-border-default rounded-lg font-mono outline-none focus:border-accent-blue"
+                  className="flex-1 text-xs px-2 py-1.5 border border-border-default rounded-lg font-mono outline-none focus:border-accent-blue bg-surface-card text-text-primary"
                 />
                 <button
                   onClick={submitInput}

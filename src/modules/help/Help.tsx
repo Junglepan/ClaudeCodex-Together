@@ -77,7 +77,7 @@ export function Help() {
               onClick={() => scrollTo(s.id)}
               className={`w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-left transition-colors ${
                 active === s.id
-                  ? 'bg-white shadow-sm text-text-primary font-medium'
+                  ? 'bg-surface-active text-text-primary font-medium'
                   : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
               }`}
             >
@@ -99,7 +99,7 @@ export function Help() {
           </div>
 
           <Section id="overview" title="工具定位">
-            <div className="bg-white border border-border-default rounded-xl p-4 space-y-2">
+            <div className="bg-surface-card border border-border-default rounded-xl p-4 space-y-2">
               <p className="text-sm text-text-secondary leading-relaxed">
                 CCT 是一个<strong className="text-text-primary">本地配置管理工具</strong>，帮助你在 Claude Code 和 Codex 之间保持一致的工作方式。
                 所有数据来源于本地文件，不连接任何远程服务。
@@ -121,7 +121,7 @@ export function Help() {
                 { label: '工作习惯层', badge: '同步目标', tone: 'blue', items: ['项目指令 (CLAUDE.md / AGENTS.md)', '技能定义 (skills/)', '自定义 Agent (.claude/agents/)'] },
                 { label: '基础设施层', badge: '不同步', tone: 'gray', items: ['Hooks 事件系统', 'MCP Server 配置', '模型选择 / 权限设置'] },
               ].map((layer) => (
-                <div key={layer.label} className="bg-white border border-border-default rounded-xl p-4 hover:border-border-default/80 transition-colors">
+                <div key={layer.label} className="bg-surface-card border border-border-default rounded-xl p-4 hover:border-border-default/80 transition-colors">
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-sm font-medium text-text-primary">{layer.label}</span>
                     <span className={`text-2xs px-1.5 py-0.5 rounded font-medium ${
@@ -142,7 +142,7 @@ export function Help() {
           </Section>
 
           <Section id="hooks" title="Hook 事件对照">
-            <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+            <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-surface-base/60 border-b border-border-subtle">
@@ -172,7 +172,7 @@ export function Help() {
           <Section id="sync" title="同步范围">
             <div className="grid grid-cols-2 gap-3">
               {SYNC_SCOPE.map((group) => (
-                <div key={group.label} className="bg-white border border-border-default rounded-xl p-4">
+                <div key={group.label} className="bg-surface-card border border-border-default rounded-xl p-4">
                   <div className="text-xs font-medium text-text-primary mb-2">{group.label}</div>
                   <ul className="space-y-1">
                     {group.items.map((item) => (
@@ -192,7 +192,7 @@ export function Help() {
           </Section>
 
           <Section id="shortcuts" title="键盘快捷键">
-            <div className="bg-white border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
+            <div className="bg-surface-card border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
               {SHORTCUTS.map((s) => (
                 <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="flex-1 min-w-0">
@@ -209,7 +209,7 @@ export function Help() {
           </Section>
 
           <Section id="safety" title="写入安全原则">
-            <div className="bg-white border border-border-default rounded-xl p-4">
+            <div className="bg-surface-card border border-border-default rounded-xl p-4">
               <ul className="space-y-2">
                 {[
                   '绝不修改 Claude 源文件（.claude/、~/.claude/、.claude.json）',
@@ -257,7 +257,7 @@ function CurrentEnvironment() {
 
 function EnvCard({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="bg-white border border-border-default rounded-xl p-3">
+    <div className="bg-surface-card border border-border-default rounded-xl p-3">
       <div className="text-2xs text-text-tertiary mb-1">{label}</div>
       <div className={`text-xs ${mono ? 'font-mono' : ''} text-text-primary truncate`}>{value}</div>
     </div>
@@ -275,7 +275,7 @@ function RegisteredAgents() {
           <button
             key={agent.id}
             onClick={() => navigate(path)}
-            className="w-full bg-white border border-border-default rounded-xl p-4 hover:border-accent-blue/40 hover:shadow-sm transition-all text-left flex items-center gap-3 group"
+            className="w-full bg-surface-card border border-border-default rounded-xl p-4 hover:border-accent-blue/40 hover:shadow-sm transition-all text-left flex items-center gap-3 group"
           >
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"

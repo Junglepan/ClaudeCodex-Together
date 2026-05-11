@@ -211,7 +211,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+    <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-4 py-3 border-b border-border-subtle hover:bg-surface-hover transition-colors text-left"
@@ -260,7 +260,7 @@ function LoadingSkeleton() {
   return (
     <div className="p-6 space-y-4 animate-pulse">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white border border-border-default rounded-xl overflow-hidden">
+        <div key={i} className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
           <div className="h-10 bg-surface-hover" />
           <div className="p-4 space-y-2">
             {[1, 2, 3].map((j) => (

@@ -42,7 +42,7 @@ export function Settings() {
               onClick={() => setActive(s.id)}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                 active === s.id
-                  ? 'bg-white shadow-sm text-text-primary font-medium'
+                  ? 'bg-surface-active text-text-primary font-medium'
                   : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
               }`}
             >
@@ -86,7 +86,7 @@ function ProjectSection() {
 
   return (
     <SectionFrame title="项目" subtitle="当前 cc-steward 管理的项目目录，影响所有 *.project 范围的配置文件路径">
-      <div className="bg-white border border-border-default rounded-xl p-4 space-y-3">
+      <div className="bg-surface-card border border-border-default rounded-xl p-4 space-y-3">
         <div>
           <div className="text-2xs text-text-tertiary mb-1">当前目录</div>
           <code className="text-xs font-mono text-text-primary break-all">{projectPath ?? '探测中…'}</code>
@@ -167,7 +167,7 @@ function ShortcutsSection() {
             <div className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
               {scope}
             </div>
-            <div className="bg-white border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
+            <div className="bg-surface-card border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
               {items.map((s) => (
                 <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="flex-1 min-w-0">
@@ -219,7 +219,7 @@ function BackupSection() {
       title="备份与导出"
       subtitle="文件写入前会自动生成 .bak.<时间戳> 备份；可导出当前所有配置为 ZIP 归档"
     >
-      <div className="bg-white border border-border-default rounded-xl p-4 mb-3">
+      <div className="bg-surface-card border border-border-default rounded-xl p-4 mb-3">
         <div className="flex items-start gap-3">
           <ShieldCheck size={18} className="text-status-active mt-0.5 flex-shrink-0" />
           <div className="flex-1">
@@ -232,7 +232,7 @@ function BackupSection() {
         </div>
       </div>
 
-      <div className="bg-white border border-border-default rounded-xl p-4">
+      <div className="bg-surface-card border border-border-default rounded-xl p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <div className="text-sm font-medium text-text-primary">导出全部配置</div>
@@ -289,7 +289,7 @@ function EnvironmentSection() {
       {error ? (
         <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{error}</div>
       ) : (
-        <div className="bg-white border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
+        <div className="bg-surface-card border border-border-default rounded-xl divide-y divide-border-subtle overflow-hidden">
           <InfoRow label="项目路径"    value={meta?.project_path ?? projectPath ?? '—'} mono copyable />
           <InfoRow label="HOME"        value={meta?.home_path ?? '—'}                   mono copyable />
           <InfoRow label="平台"         value={meta?.platform ?? platform ?? '—'} />
@@ -308,7 +308,7 @@ function EnvironmentSection() {
 function AboutSection() {
   return (
     <SectionFrame title="关于" subtitle="cc-steward · 本地 Claude Code / Codex 配置管家">
-      <div className="bg-white border border-border-default rounded-xl p-5 space-y-4">
+      <div className="bg-surface-card border border-border-default rounded-xl p-5 space-y-4">
         <div className="flex items-baseline gap-3">
           <span className="text-base font-semibold text-text-primary">cc-steward</span>
           <span className="text-2xs px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue font-mono">
@@ -368,7 +368,7 @@ function SettingRow({
   control: React.ReactNode
 }) {
   return (
-    <div className="bg-white border border-border-default rounded-xl px-4 py-3 mb-2 flex items-start gap-3 last:mb-0">
+    <div className="bg-surface-card border border-border-default rounded-xl px-4 py-3 mb-2 flex items-start gap-3 last:mb-0">
       {icon && <div className="mt-0.5 flex-shrink-0">{icon}</div>}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-text-primary">{label}</div>

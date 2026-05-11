@@ -37,7 +37,7 @@ export function AgentConfigPage({ agentId }: Props) {
 
   return (
     <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden animate-fade-in">
-      <div className="px-6 py-4 border-b border-border-default flex items-center gap-4 flex-shrink-0 bg-white">
+      <div className="px-6 py-4 border-b border-border-default flex items-center gap-4 flex-shrink-0 bg-surface-card">
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: `${agent.color}18` }}
@@ -68,7 +68,7 @@ export function AgentConfigPage({ agentId }: Props) {
         </button>
       </div>
 
-      <div className="px-6 border-b border-border-default flex gap-0 flex-shrink-0 bg-white">
+      <div className="px-6 border-b border-border-default flex gap-0 flex-shrink-0 bg-surface-card">
         <TabBtn active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}
           icon={<LayoutGrid size={13} />} label="总览" />
         <TabBtn active={activeTab === 'files'} onClick={() => setActiveTab('files')}
@@ -136,7 +136,7 @@ function OverviewTab({
         <StatCard label="项目范围" value={projectFiles.length} color="text-text-secondary" />
       </div>
 
-      <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+      <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
           <h2 className="text-sm font-medium text-text-primary">文件状态</h2>
           <div className="flex items-center gap-3 text-2xs text-text-tertiary">
@@ -163,7 +163,7 @@ function OverviewTab({
       </div>
 
       {agentId === 'claude' && (
-        <div className="bg-white border border-border-default rounded-xl overflow-hidden">
+        <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border-subtle">
             <h2 className="text-sm font-medium text-text-primary">配置关系与优先级</h2>
             <p className="text-2xs text-text-tertiary mt-0.5">Claude Code 配置文件的加载顺序、合并策略与作用域</p>
@@ -175,7 +175,7 @@ function OverviewTab({
       )}
 
       {agentId === 'codex' && (
-        <div className="bg-white border border-border-default rounded-xl p-4">
+        <div className="bg-surface-card border border-border-default rounded-xl p-4">
           <h2 className="text-sm font-medium text-text-primary mb-3">配置层次说明</h2>
           <div className="space-y-2.5">
             <HierarchyItem step={1} label="全局配置" path="~/.codex/config.toml" desc="全局行为设置，适用于所有项目" />
@@ -192,7 +192,7 @@ function OverviewTab({
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-white border border-border-default rounded-xl px-4 py-3 text-center">
+    <div className="bg-surface-card border border-border-default rounded-xl px-4 py-3 text-center">
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
       <div className="text-2xs text-text-tertiary mt-0.5">{label}</div>
     </div>
@@ -244,7 +244,7 @@ function FilesTab({ agentId }: { agentId: string }) {
               placeholder="搜索文件"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-card border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors"
             />
           </div>
         </div>
@@ -281,7 +281,7 @@ function FilesTab({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-surface-card">
         {selectedFile && selectedFile.agentId === agentId ? (
           <FileDetail agentId={selectedFile.agentId} fileKey={selectedFile.fileKey} />
         ) : (

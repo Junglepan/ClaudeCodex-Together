@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, files, sync, backup, config
+from api.routers import agents, files, sync, backup, config, projects
 
 app = FastAPI(
     title="cc-steward Backend",
@@ -35,6 +35,7 @@ app.include_router(files.router)
 app.include_router(sync.router)
 app.include_router(backup.router)
 app.include_router(config.router)
+app.include_router(projects.router)
 
 
 # ── Core endpoints ───────────────────────────────────────────────────────────
@@ -57,12 +58,10 @@ def meta():
     }.get(system, system)
 
     # CC_STEWARD_PROJECT env var lets callers specify the project root explicitly.
-    # Legacy CCT_PROJECT still accepted. Falls back to backend's parent dir.
+    # Legacy CCT_PROJECT still accepted. Falls back to the user's home directory.
     project_path = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
     if not project_path:
-        # backend/ lives inside the project root, go one level up
-        backend_dir = Path(__file__).parent
-        project_path = str(backend_dir.parent)
+        project_path = str(Path.home())
 
     return {
         "project_path": project_path,

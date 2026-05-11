@@ -53,7 +53,7 @@ export function ConfigFiles() {
               placeholder="搜索文件或路径"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-card border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors"
             />
           </div>
         </div>
@@ -113,7 +113,7 @@ export function ConfigFiles() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-surface-card">
         {selectedFile ? (
           <FileDetail agentId={selectedFile.agentId} fileKey={selectedFile.fileKey} />
         ) : (

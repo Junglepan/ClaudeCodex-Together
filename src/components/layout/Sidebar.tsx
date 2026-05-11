@@ -99,7 +99,7 @@ function NavItem({
       className={({ isActive }) =>
         `group flex items-center gap-2.5 ${collapsed ? 'justify-center px-0' : 'px-3'} py-2 rounded-lg text-sm transition-all ${
           isActive
-            ? 'bg-white shadow-sm text-text-primary font-medium'
+            ? 'bg-surface-active text-text-primary font-medium'
             : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
         }`
       }
@@ -157,7 +157,7 @@ function NavSection({
               className={({ isActive }) =>
                 `group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
                   isActive
-                    ? 'bg-white shadow-sm text-text-primary font-medium'
+                    ? 'bg-surface-active text-text-primary font-medium'
                     : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                 }`
               }

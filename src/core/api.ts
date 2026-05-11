@@ -200,10 +200,21 @@ export const api = {
       ),
   },
 
+  projects: {
+    list: () => request<ApiProject[]>(`/projects`),
+  },
+
   config: {
     resolved: (agentId: string, projectPath?: string) =>
       request<ApiResolvedConfig>(
         `/config/resolved?agent=${agentId}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
       ),
   },
+}
+
+export interface ApiProject {
+  path: string
+  name: string
+  exists: boolean
+  source: 'claude' | 'codex' | 'both'
 }

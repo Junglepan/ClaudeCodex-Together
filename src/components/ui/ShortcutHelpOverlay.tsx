@@ -52,7 +52,7 @@ export function ShortcutHelpOverlay({ open, onClose }: Props) {
                   {items.map((s) => (
                     <div key={s.id} className="flex items-center gap-3 px-3 py-2">
                       <span className="text-xs font-medium text-text-primary flex-1">{s.label}</span>
-                      <kbd className="text-2xs font-mono px-2 py-1 bg-white border border-border-default rounded text-text-secondary">{s.keys}</kbd>
+                      <kbd className="text-2xs font-mono px-2 py-1 bg-surface-card border border-border-default rounded text-text-secondary">{s.keys}</kbd>
                     </div>
                   ))}
                 </div>

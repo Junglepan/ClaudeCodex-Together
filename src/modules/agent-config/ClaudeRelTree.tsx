@@ -81,7 +81,7 @@ export function ClaudeRelTree() {
             const style = PRIORITY_STYLES[layer.priority]
             return (
               <div key={layer.label}>
-                <div className="flex items-stretch gap-3 rounded-xl border border-border-default bg-white overflow-hidden">
+                <div className="flex items-stretch gap-3 rounded-xl border border-border-default bg-surface-card overflow-hidden">
                   <div className={`w-1 flex-shrink-0 ${style.bar}`} />
                   <div className="flex-1 py-2.5 pr-3">
                     <div className="flex items-center gap-2 mb-0.5">
@@ -114,7 +114,7 @@ export function ClaudeRelTree() {
         <SectionHeader icon={<BookOpen size={14} />} title="CLAUDE.md 加载顺序" subtitle="所有层均被加载并拼接注入上下文，不互相覆盖" />
         <div className="border border-border-default rounded-xl overflow-hidden divide-y divide-border-subtle">
           {CLAUDE_MD_LAYERS.map((layer, i) => (
-            <div key={layer.path} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-surface-hover transition-colors">
+            <div key={layer.path} className="flex items-center gap-3 px-3 py-2.5 bg-surface-card hover:bg-surface-hover transition-colors">
               <div className="w-5 h-5 rounded-full bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center flex-shrink-0">
                 <span className="text-2xs font-bold text-accent-blue">{i + 1}</span>
               </div>

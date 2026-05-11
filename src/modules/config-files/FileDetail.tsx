@@ -96,7 +96,7 @@ export function FileDetail({ agentId, fileKey }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden animate-fade-in">
-      <div className="px-5 py-3.5 border-b border-border-default flex items-center gap-3 flex-shrink-0 bg-white">
+      <div className="px-5 py-3.5 border-b border-border-default flex items-center gap-3 flex-shrink-0 bg-surface-card">
         <span className="font-semibold text-text-primary text-sm">{fileSpec.label}</span>
         <ExistsBadge exists={detail.exists} />
         <div className="ml-auto flex items-center gap-2">
@@ -283,7 +283,7 @@ function EditorTextarea({
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); onSave() }
         if (e.key === 'Escape') { e.preventDefault(); onCancel() }
       }}
-      className="w-full h-64 p-3 text-xs font-mono text-text-primary bg-white border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors resize-y leading-relaxed"
+      className="w-full h-64 p-3 text-xs font-mono text-text-primary bg-surface-card border border-border-default rounded-lg outline-none focus:border-accent-blue transition-colors resize-y leading-relaxed"
       spellCheck={false}
       placeholder={placeholder}
     />
@@ -302,7 +302,7 @@ function ContentViewer({ content }: { content: string }) {
         <span className="text-2xs text-text-tertiary">{lines} 行{truncated ? '（已截断）' : ''}</span>
         <CopyBtn text={content} />
       </div>
-      <pre className="p-3 text-xs font-mono text-text-primary overflow-auto max-h-64 leading-relaxed bg-white">
+      <pre className="p-3 text-xs font-mono text-text-primary overflow-auto max-h-64 leading-relaxed bg-surface-card">
         {display}
         {truncated && <span className="text-text-tertiary">{'\n'}…（内容已截断）</span>}
       </pre>
