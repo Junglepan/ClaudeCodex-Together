@@ -61,18 +61,31 @@ export interface ApiFileDetail {
   parsed_hooks?: ParsedHook[] | null
 }
 
-export interface ApiSyncPlan {
-  items: ApiSyncItem[]
-  stats: { migratable: number; needs_conversion: number; conflicts: number; ignored: number }
-}
-
 export interface ApiSyncItem {
-  status: 'added' | 'check' | 'not_added'
-  type: 'Instruction' | 'Skill' | 'Subagent' | 'Hook' | 'MCP' | 'Plugin'
+  status: 'added' | 'check' | 'unsupported' | 'not_added'
+  type: 'Instruction' | 'Skill' | 'Subagent' | 'Hook' | 'Command' | 'Settings' | 'MCP' | 'Plugin'
   name: string
   source: string
   target: string
   notes: string
+  warnings?: string[]
+  dry_run_action?: 'would_write' | 'would_skip' | 'skip_unsupported' | 'unknown'
+}
+
+export interface ApiSyncScanResult {
+  items: ApiSyncItem[]
+}
+
+export interface ApiSyncPlan {
+  items: ApiSyncItem[]
+  stats: { migratable: number; needs_conversion: number; conflicts: number; unsupported: number }
+}
+
+export interface ApiSyncDryRunResult {
+  dry_run: true
+  items: ApiSyncItem[]
+  would_write: string[]
+  would_skip: string[]
 }
 
 export interface ApiSyncResult {
@@ -80,6 +93,7 @@ export interface ApiSyncResult {
   items: ApiSyncItem[]
   written: string[]
   skipped: string[]
+  errors?: string[]
 }
 
 export interface ApiMeta {
@@ -132,28 +146,28 @@ export const api = {
   },
 
   sync: {
+    scan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
+      request<ApiSyncScanResult>(
+        '/sync/scan',
+        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
+      ),
+
     plan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
       request<ApiSyncPlan>(
         '/sync/plan',
         { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
       ),
 
+    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
+      request<ApiSyncDryRunResult>(
+        '/sync/dry-run',
+        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath, replace }) },
+      ),
+
     execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
       request<ApiSyncResult>(
         '/sync/execute',
-        {
-          method: 'POST',
-          body: JSON.stringify({ scope, project_path: projectPath, replace, dry_run: false }),
-        },
-      ),
-
-    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncResult>(
-        '/sync/execute',
-        {
-          method: 'POST',
-          body: JSON.stringify({ scope, project_path: projectPath, replace: false, dry_run: true }),
-        },
+        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath, replace }) },
       ),
   },
 }
