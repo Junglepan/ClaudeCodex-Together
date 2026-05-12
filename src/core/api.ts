@@ -1,9 +1,5 @@
-/**
- * Backend API client. All calls hit the local FastAPI backend via the
- * Vite proxy at /api → http://127.0.0.1:8765.
- */
-
-const BASE = '/api'
+const IS_FILE_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'file:'
+const BASE = IS_FILE_PROTOCOL ? 'http://127.0.0.1:8765' : '/api'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

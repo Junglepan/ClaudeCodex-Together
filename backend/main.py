@@ -16,7 +16,7 @@ from api.routers import agents, files, sync, backup, config, projects
 app = FastAPI(
     title="cc-steward Backend",
     description="Claude / Codex Configuration Steward — local file API",
-    version="1.0.0",
+    version="1.0.2",
 )
 
 app.add_middleware(
@@ -42,7 +42,7 @@ app.include_router(projects.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.0.2"}
 
 
 @app.get("/meta")
