@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createBrowserRouter, RouterProvider, Navigate, useNavigate } from 'react-router-dom'
+import { createHashRouter, RouterProvider, Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { ToastHost } from '@/components/ui/Toast'
 import { CommandPalette } from '@/components/ui/CommandPalette'
@@ -106,7 +106,7 @@ function ShellWithGlobals() {
 
 function buildRouter() {
   const modules = moduleRegistry.getAll()
-  return createBrowserRouter([
+  return createHashRouter([
     {
       path: '/',
       element: <ShellWithGlobals />,

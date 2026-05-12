@@ -13,12 +13,33 @@ let watcherCleanup: (() => void) | null = null
 
 // ── Backend ──────────────────────────────────────────────────────────────────
 
-function startBackend() {
-  const backendDir = isDev
-    ? path.join(__dirname, '..', 'backend')
-    : path.join(process.resourcesPath, 'backend')
+function resolvePythonCommand() {
+  const candidates = process.platform === 'win32'
+    ? ['python.exe', 'python']
+    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
 
-  backendProcess = spawn('python3', ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
+  return candidates.find((candidate) => {
+    if (path.isAbsolute(candidate)) return fs.existsSync(candidate)
+    return true
+  }) ?? 'python3'
+}
+
+function resolveBackendDir() {
+  if (isDev) return path.join(__dirname, '..', 'backend')
+
+  const candidates = [
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'backend'),
+    path.join(process.resourcesPath, 'backend'),
+  ]
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+}
+
+function startBackend() {
+  const backendDir = resolveBackendDir()
+  const pythonCommand = resolvePythonCommand()
+
+  backendProcess = spawn(pythonCommand, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
     cwd: backendDir,
     stdio: isDev ? 'inherit' : 'pipe',
   })
@@ -27,7 +48,7 @@ function startBackend() {
     console.error('Failed to start backend:', err)
   })
 
-  console.log('Backend started on port', BACKEND_PORT)
+  console.log('Backend started on port', BACKEND_PORT, 'using', pythonCommand, 'in', backendDir)
 }
 
 function stopBackend() {
