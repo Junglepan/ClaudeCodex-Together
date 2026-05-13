@@ -58,10 +58,9 @@ def meta():
     }.get(system, system)
 
     # CC_STEWARD_PROJECT env var lets callers specify the project root explicitly.
-    # Legacy CCT_PROJECT still accepted. Falls back to the user's home directory.
-    project_path = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT")
-    if not project_path:
-        project_path = str(Path.home())
+    # Legacy CCT_PROJECT still accepted. Returns null when no env var is set so
+    # the frontend keeps projectPath undefined and ProjectSelector shows "未选择项目".
+    project_path = os.environ.get("CC_STEWARD_PROJECT") or os.environ.get("CCT_PROJECT") or None
 
     return {
         "project_path": project_path,
