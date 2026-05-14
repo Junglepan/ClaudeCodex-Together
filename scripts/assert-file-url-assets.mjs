@@ -29,17 +29,15 @@ if (!appSource.includes('createHashRouter')) {
   process.exit(1)
 }
 
-if (!electronMainSource.includes('app.asar.unpacked') || !electronMainSource.includes('resolvePythonCommand')) {
-  console.error('electron/main.ts must resolve unpacked backend files and an absolute Python command for packaged app startup.')
+if (!electronMainSource.includes("ipcMain.handle('cct:api'") || electronMainSource.includes('uvicorn') || electronMainSource.includes('resolvePythonCommand')) {
+  console.error('electron/main.ts must use direct IPC backend handlers and must not spawn Python/FastAPI.')
   process.exit(1)
 }
 
-const asarUnpack = packageJson.build?.asarUnpack
-const backendUnpacked = Array.isArray(asarUnpack) && asarUnpack.includes('backend/**/*')
-
-if (!backendUnpacked) {
-  console.error('package.json build.asarUnpack must include backend/**/* so Python can execute backend files outside app.asar.')
+const packagedFiles = packageJson.build?.files ?? []
+if (JSON.stringify(packagedFiles).includes('backend') || packageJson.build?.asarUnpack) {
+  console.error('package.json must not package the deleted Python backend or backend asarUnpack entries.')
   process.exit(1)
 }
 
-console.log('Packaged Electron renderer and backend paths are compatible with file:// loading.')
+console.log('Packaged Electron renderer and IPC backend paths are compatible with file:// loading.')

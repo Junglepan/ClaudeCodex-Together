@@ -1,66 +1,22 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import { handleBackendRequest, type BackendRequest } from './backend/api'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
-const BACKEND_PORT = 8765
 const FRONTEND_PORT = 5174
 
 let mainWindow: BrowserWindow | null = null
-let backendProcess: ChildProcess | null = null
 let watcherCleanup: (() => void) | null = null
-
-// ── Backend ──────────────────────────────────────────────────────────────────
-
-function resolvePythonCommand() {
-  const candidates = process.platform === 'win32'
-    ? ['python.exe', 'python']
-    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
-
-  return candidates.find((candidate) => {
-    if (path.isAbsolute(candidate)) return fs.existsSync(candidate)
-    return true
-  }) ?? 'python3'
-}
-
-function resolveBackendDir() {
-  if (isDev) return path.join(__dirname, '..', 'backend')
-
-  const candidates = [
-    path.join(process.resourcesPath, 'app.asar.unpacked', 'backend'),
-    path.join(process.resourcesPath, 'backend'),
-  ]
-
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
-}
-
-function startBackend() {
-  const backendDir = resolveBackendDir()
-  const pythonCommand = resolvePythonCommand()
-
-  backendProcess = spawn(pythonCommand, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
-    cwd: backendDir,
-    stdio: isDev ? 'inherit' : 'pipe',
-  })
-
-  backendProcess.on('error', (err) => {
-    console.error('Failed to start backend:', err)
-  })
-
-  console.log('Backend started on port', BACKEND_PORT, 'using', pythonCommand, 'in', backendDir)
-}
-
-function stopBackend() {
-  if (backendProcess) {
-    backendProcess.kill()
-    backendProcess = null
-  }
-}
 
 // ── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpc() {
+  ipcMain.handle('cct:api', async (_e, request: BackendRequest) => {
+    return handleBackendRequest(request)
+  })
+
   ipcMain.handle('cct:reveal-in-finder', async (_e, filePath: string) => {
     shell.showItemInFolder(filePath)
   })
@@ -323,7 +279,6 @@ function createWindow() {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu())
   registerIpc()
-  startBackend()
 
   setTimeout(createWindow, isDev ? 0 : 1500)
 
@@ -333,10 +288,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  stopBackend()
   if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('before-quit', () => {
-  stopBackend()
 })

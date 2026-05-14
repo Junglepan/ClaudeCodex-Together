@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('cct', {
   platform: process.platform,
   isElectron: true,
 
+  api: (request: { endpoint: string; payload?: Record<string, unknown> }): Promise<unknown> =>
+    ipcRenderer.invoke('cct:api', request),
+
   revealInFinder: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('cct:reveal-in-finder', filePath),
 

@@ -38,17 +38,13 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - run: npm ci
-
-      - name: Install backend test dependencies
-        run: python -m pip install -r backend/requirements.txt pytest
 
       - name: Type check
         run: npm run type-check
+
+      - name: Test backend
+        run: npm run test:backend
 
       - name: Build frontend
         run: npm run build:frontend
@@ -58,9 +54,6 @@ jobs:
 
       - name: Build Electron main process
         run: npm run build:electron
-
-      - name: Test backend
-        run: python -m pytest backend/tests
 
       - name: Package with electron-builder
         run: npx electron-builder --publish never

@@ -17,5 +17,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx vite build
+      - run: npm run type-check
+      - run: npm run test:backend
+      - run: npm run build:frontend
+      - run: npm run check:file-assets
+      - run: npm run build:electron

@@ -26,8 +26,7 @@ export function PathMapping() {
   const [meta, setMeta] = useState<{ project_path: string; home_path: string } | null>(null)
 
   useEffect(() => {
-    // Load meta
-    fetch('/api/meta').then(r => r.json()).then(setMeta).catch(console.error)
+    api.meta().then(setMeta).catch(console.error)
 
     // Build path groups from agent files
     Promise.all(
