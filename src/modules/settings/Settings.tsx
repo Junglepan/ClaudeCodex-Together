@@ -259,6 +259,7 @@ function EnvironmentSection() {
   const [meta, setMeta]       = useState<ApiMeta | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  const frontendAddress = typeof window === 'undefined' ? '—' : window.location.href
 
   const load = () => {
     setLoading(true); setError(null)
@@ -293,7 +294,7 @@ function EnvironmentSection() {
           <InfoRow label="平台"         value={meta?.platform ?? platform ?? '—'} />
           <InfoRow label="主机名"       value={meta?.hostname ?? '—'}                   mono />
           <InfoRow label="后端"         value="Electron IPC"                            mono />
-          <InfoRow label="前端地址"     value="http://localhost:5174" mono copyable />
+          <InfoRow label="前端地址"     value={frontendAddress} mono copyable />
         </div>
       )}
     </SectionFrame>
