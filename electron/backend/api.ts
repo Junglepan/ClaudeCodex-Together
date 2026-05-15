@@ -6,6 +6,7 @@ import { deleteFile, fileMeta, readFile, writeFile } from './files'
 import { homeDir, projectRoot } from './fsUtils'
 import { listProjects } from './projects'
 import { syncDryRun, syncExecute, syncPlan, syncScan } from './sync'
+import pkg from '../../package.json'
 
 export interface BackendRequest {
   endpoint: string
@@ -16,7 +17,7 @@ export async function handleBackendRequest(request: BackendRequest): Promise<unk
   const payload = request.payload ?? {}
   switch (request.endpoint) {
     case 'health':
-      return { status: 'ok', version: '1.0.2' }
+      return { status: 'ok', version: pkg.version }
     case 'meta':
       return {
         project_path: process.env.CC_STEWARD_PROJECT || process.env.CCT_PROJECT || homeDir(),

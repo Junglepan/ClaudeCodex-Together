@@ -16,7 +16,8 @@ interface Toast {
 export type ThemePref = 'light' | 'dark' | 'auto'
 
 interface AppState {
-  // Current project directory (default: cwd from backend)
+  // Current project directory. undefined means metadata has not loaded yet;
+  // once loaded, a string path (including the home directory) is the active project.
   projectPath: string | undefined
   setProjectPath: (path: string) => void
 

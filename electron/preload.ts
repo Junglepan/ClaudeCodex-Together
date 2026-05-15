@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('cct', {
   onMenuAction: (cb: (action: string, payload?: unknown) => void) => {
     ipcRenderer.on('cct:menu-refresh',         () => cb('refresh'))
     ipcRenderer.on('cct:menu-toggle-sidebar',  () => cb('toggle-sidebar'))
+    ipcRenderer.on('cct:menu-toggle-theme',    () => cb('toggle-theme'))
     ipcRenderer.on('cct:menu-navigate',        (_e, route: string) => cb('navigate', route))
   },
   offAll: () => {
@@ -50,6 +51,7 @@ contextBridge.exposeInMainWorld('cct', {
     ipcRenderer.removeAllListeners('cct:switch-project')
     ipcRenderer.removeAllListeners('cct:menu-refresh')
     ipcRenderer.removeAllListeners('cct:menu-toggle-sidebar')
+    ipcRenderer.removeAllListeners('cct:menu-toggle-theme')
     ipcRenderer.removeAllListeners('cct:menu-navigate')
   },
 })

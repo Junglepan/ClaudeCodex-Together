@@ -112,7 +112,7 @@
 
 ### D-1 Agent 状态卡片重构（全局 + 项目分组）
 
-- [ ] **D-1-1** 卡片内部结构改为两段：全局层 + 项目层
+- [x] **D-1-1** 卡片内部结构改为两段：全局层 + 项目层
 
   **目标视觉结构（双列并排）：**
   ```
@@ -138,11 +138,11 @@
     - `✗ 红色 + 标签`：不存在，标签说明影响（"未配置"、"未同步"、"建议创建"）
     - `─ 灰色`：该 agent 无此机制，不适用
 
-- [ ] **D-1-2** 去掉纯数字汇总行（"5 个文件已存在 / 3 个未创建"）
+- [x] **D-1-2** 去掉纯数字汇总行（"5 个文件已存在 / 3 个未创建"）
   - 替换为：如果有任何关键文件缺失，在卡片底部展示一条橙色警示行，如"⚠ 当前项目 AGENTS.md 未同步"
   - 如果全部关键文件存在，展示绿色"✓ 配置完整"
 
-- [ ] **D-1-3** 关键文件的定义（哪些缺失需要警告）
+- [x] **D-1-3** 关键文件的定义（哪些缺失需要警告）
   - Claude 全局：`~/.claude/CLAUDE.md`、`~/.claude/settings.json`
   - Codex 全局：`~/.codex/AGENTS.md`、`~/.codex/config.toml`
   - 项目层（如果有项目）：`CLAUDE.md` 和 `AGENTS.md` 是配对文件，其中一个存在另一个不存在时，标注"未同步"
@@ -150,11 +150,11 @@
 
 ### D-2 配置对照表重构（同步对齐视图）
 
-- [ ] **D-2-1** 移除"工作习惯层 / 基础设施层"分组标签
+- [x] **D-2-1** 移除"工作习惯层 / 基础设施层"分组标签
   - 改用用户能理解的分类：**指令 / 技能 / Agent / 设置 / 命令**
   - 每个分类行对应：该功能在 Claude 侧和 Codex 侧各自的文件/目录
 
-- [ ] **D-2-2** 对照表增加"同步状态"列，说明对比的语义
+- [x] **D-2-2** 对照表增加"同步状态"列，说明对比的语义
   - 列头：`功能` | `Claude` | `Codex` | `同步状态`
   - 同步状态取值：
     - `✓ 已对齐`：两侧都存在
@@ -164,7 +164,7 @@
     - `─ 仅适用于 Claude`：该功能 Codex 无等价机制
   - 这一列让用户理解"对比"的目的是检查 Claude ↔ Codex 配置是否对齐，而非仅展示存不存在
 
-- [ ] **D-2-3** 对照表新增 A-1 / I-2 模块补充的配置项
+- [x] **D-2-3** 对照表新增 A-1 / I-2 模块补充的配置项
   - 加入 `global_instructions`（CLAUDE.md ↔ AGENTS.md）
   - 加入 `global_agents`（~/.claude/agents/ ↔ ~/.codex/agents/）
   - 加入 `global_commands`（~/.claude/commands/ — 仅 Claude，标"─"）
@@ -182,7 +182,7 @@
 
 ### D-4 数据层对接（依赖 J 模块）
 
-- [ ] **D-4-1** 概览使用 `projectPath`（来自 Zustand store，J-2-1 新增）
+- [x] **D-4-1** 概览使用 `projectPath`（来自 Zustand store，J-2-1 新增）
   - 当 `projectPath` 为 null 时：项目层区域显示"未选择项目"占位提示，对照表只展示全局行
   - 当 `projectPath` 有值时：额外拉取该项目下的文件 meta，填充项目层状态
 
@@ -205,24 +205,24 @@
 
 > 对应后端四个独立接口（见 E-4）。每个阶段结果留在页面，用户在每一步都能看到发生了什么。
 
-- [ ] **E-1-1** 页面加载自动触发第一阶段 `POST /sync/scan`（纯只读）
+- [x] **E-1-1** 页面加载自动触发第一阶段 `POST /sync/scan`（纯只读）
   - scan 无副作用，应主动呈现，不藏在按钮后面
   - 加载中展示骨架屏；后端不可达时展示"后端未运行"提示，不报错
   - scan 完成后展示"扫描结果面板"，出现"查看转换计划 →"按钮
 
-- [ ] **E-1-1b** 用户点击"查看转换计划"触发第二阶段 `POST /sync/plan`（scan + convert，不写）
+- [x] **E-1-1b** 用户点击"查看转换计划"触发第二阶段 `POST /sync/plan`（scan + convert，不写）
   - plan 在 scan 结果下方叠加展示转换详情，原 scan 面板保持可见
   - plan 完成后"查看转换计划"按钮变为已完成态，出现"预演（Dry Run）→"按钮
 
-- [ ] **E-1-1c** 用户点击"预演"触发第三阶段 `POST /sync/dry-run`（scan + convert + write dry_run=True）
+- [x] **E-1-1c** 用户点击"预演"触发第三阶段 `POST /sync/dry-run`（scan + convert + write dry_run=True）
   - dry-run 在计划结果下方叠加展示每项目标文件的实际冲突检测结果
   - 此时状态标签从"待同步/有冲突"等静态状态变为"将写入/将跳过/将覆盖"等明确预期
   - dry-run 完成后出现"执行同步（N 项）"按钮
 
-- [ ] **E-1-1d** 用户点击"执行同步"触发第四阶段 `POST /sync/execute`（实际写入）
+- [x] **E-1-1d** 用户点击"执行同步"触发第四阶段 `POST /sync/execute`（实际写入）
   - 执行结果追加展示，不覆盖前三阶段的面板（保留完整操作历史）
 
-- [ ] **E-1-2** 扫描结果面板逐项展示，每行包含：
+- [x] **E-1-2** 扫描结果面板逐项展示，每行包含：
   ```
   [类型徽章]  名称           源路径 → 目标路径        [状态标签]   [展开▾]
   skill       migrate-to-codex  ~/.claude/skills/...  →  ~/.codex/skills/...   待同步
@@ -239,7 +239,8 @@
     - `需人工检查`（黄色）：converter 检测到工具名引用等无法自动处理的内容，写入后需用户确认
     - `不可迁移`（灰色）：Codex 不支持此类型（如 Stop Hook），不会写入
 
-- [ ] **E-1-3** 每行可展开"转换说明"抽屉
+- [~] **E-1-3** 每行可展开"转换说明"抽屉
+  - 当前已展示 notes / warnings；结构化 diff 和逐行转换细节仍保留为后续增强。
   - 展示 converter 的实际操作：
     ```
     ✂ 已删除 2 行（Claude 专属斜杠命令）：
@@ -260,19 +261,19 @@
 - [ ] **E-2-1** 范围选择保留（全部 / 仅全局 / 仅当前项目），与 J 模块 `projectPath` 联动
   - 当 `projectPath` 为 null 时，"仅当前项目"选项置灰并提示"请先选择项目"
 
-- [ ] **E-2-2** 新增"覆盖模式"开关（默认关闭）
+- [x] **E-2-2** 新增"覆盖模式"开关（默认关闭）
   - 关闭时：`有冲突` 状态的文件跳过
   - 开启时：`有冲突` 状态的文件强制覆盖（原文件自动备份为 `.bak.<ts>`）
   - 开启后在扫描面板中将`有冲突`项的标签更新为`将覆盖`（橙色加粗），提升感知
 
-- [ ] **E-2-3** 执行按钮状态
+- [x] **E-2-3** 执行按钮状态
   - 扫描中：禁用，显示"扫描中..."
   - 扫描完成无可同步项：禁用，显示"无需同步"
   - 有待同步或待覆盖项：启用，显示"执行同步（N 项）"
 
 ### E-3 执行报告重构
 
-- [ ] **E-3-1** 执行后结果按状态分组展示
+- [x] **E-3-1** 执行后结果按状态分组展示
   - 分组：`已写入（N）` / `已跳过（N）` / `失败（N）`（失败组折叠默认展开）
   - 移除原有英文状态列，改为中文状态徽章
 
@@ -288,7 +289,8 @@
 > 前端拿到的数据无法区分"扫描到了什么"和"转换后是什么"和"预计写入什么"。
 > 改动量小：函数本身不动，只拆路由。
 
-- [ ] **E-4-1** 拆分 `backend/api/routers/sync.py`，将 `_build_plan` 逻辑拆成四个路由
+- [x] **E-4-1** 拆分 sync 后端，将 `_build_plan` 逻辑拆成四个接口
+  - Electron IPC 后端已提供 `sync.scan` / `sync.plan` / `sync.dryRun` / `sync.execute`。
 
   | 接口 | 调用逻辑 | 返回 |
   |------|----------|------|
@@ -301,7 +303,8 @@
   - `POST /sync/plan` 和 `POST /sync/dry-run` 保持幂等（无副作用）
   - 现有 `GET /sync/plan` 和 `POST /sync/execute` 路由可先保留做兼容，标记 deprecated
 
-- [ ] **E-4-2** `/sync/plan` 响应透传 `converter.py` 的 `warnings` 字段
+- [~] **E-4-2** `/sync/plan` 响应透传 converter warnings 字段
+  - Electron IPC 后端已透传简单 warnings；结构化 `removed_lines` / `tool_comments` / `check_lines` 仍保留为后续增强。
   - `converter.py` 已记录 warnings（删除的斜杠命令行、工具名引用检测结果），但当前路由响应将其丢弃
   - 改动：在 `_build_plan` / plan 路由的序列化处将 `warnings` 字段包含进响应体
   - 响应结构（每项）：
@@ -325,7 +328,7 @@
   - 本地覆盖层含个人敏感配置，不纳入同步范围
   - scan 阶段检测到此类文件时，状态直接设为 `unsupported`，notes 说明"本地覆盖文件不参与同步"
 
-- [ ] **E-4-4** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
+- [x] **E-4-4** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
   - `global_instructions`（CLAUDE.md → AGENTS.md）：加入 scan 范围，走 instruction converter
   - `global_agents`（~/.claude/agents/ → ~/.codex/agents/）：加入 scan 范围，走 agent converter
   - `global_commands`（~/.claude/commands/）：scan 到后状态固定为 `unsupported`，notes 说明"Codex 无等价斜杠命令机制"
@@ -617,7 +620,8 @@
 
 ### K-1 原生应用菜单（高优先级，macOS 基本素养）
 
-- [ ] **K-1-1** 在 `electron/main.ts` 中使用 `Menu.buildFromTemplate` 注册应用菜单
+- [~] **K-1-1** 在 `electron/main.ts` 中使用 `Menu.buildFromTemplate` 注册应用菜单
+  - 原生菜单已注册，含项目切换、刷新、侧栏、主题、帮助/同步/偏好和 GitHub 入口；导出当前配置仍保留为后续增强。
 
   **菜单结构：**
   ```
@@ -653,7 +657,7 @@
   - 编辑菜单使用内置 `role` 即可，Electron 自动处理，不需要自定义逻辑
   - "切换项目"、"切换深色模式"、"折叠侧栏"、"导航到帮助页"等需要 renderer 响应的菜单项，通过 `mainWindow.webContents.send(event)` 推送；renderer 在 `electron-bridge.ts` 中监听对应事件并调用 store/router
 
-- [ ] **K-1-2** renderer 侧注册菜单 IPC 监听
+- [x] **K-1-2** renderer 侧注册菜单 IPC 监听
   - 在 `src/lib/electron-bridge.ts`（或 App.tsx 顶层）监听：
     - `app:toggle-theme` → 调用 `useAppStore.getState().setTheme(...)`
     - `app:toggle-sidebar` → 调用 `useAppStore.getState().setSidebarCollapsed(...)`
@@ -664,7 +668,7 @@
 
 > 用户在外部编辑配置文件（VS Code / vim）后，cc-steward 无感知，展示的是过期数据。
 
-- [ ] **K-2-1** 在 `electron/main.ts` 中维护 `fs.watch` 监听集合
+- [x] **K-2-1** 在 `electron/main.ts` 中维护 `fs.watch` 监听集合
 
   **监听目标：**
   - 始终监听：`~/.claude/`（递归）、`~/.codex/`（递归）
@@ -693,13 +697,14 @@
   - 项目路径变更时（renderer 发送 `app:set-project`），主进程重新调用 `startWatching`
   - 应用退出时 `watcher?.close()`
 
-- [ ] **K-2-2** renderer 侧响应 `fs:changed` 事件触发数据刷新
+- [x] **K-2-2** renderer 侧响应 `fs:changed` 事件触发数据刷新
   - 在 `src/lib/electron-bridge.ts` 暴露 `onFsChanged(callback)` 订阅函数
   - 各数据 hook（`useAgentFiles`、`useAgentStatus`、`useProjects`）在 Electron 模式下注册此监听，收到事件后调用 `refetch()`
   - 刷新时不重置页面状态（不清空选中的文件），静默后台刷新
   - 对同一文件的高频变更做 300ms 防抖（由 chokidar `awaitWriteFinish` 处理，renderer 无需额外处理）
 
-- [ ] **K-2-3** 确认 `chokidar` 依赖
+- [x] **K-2-3** 确认 `chokidar` 依赖
+  - 当前实现使用原生 `fs.watch`，未新增运行时依赖。
   - 检查 `package.json` 中是否已有 `chokidar`（Vite/Electron 工具链常带此依赖）
   - 若无则 `npm install chokidar`，确保其在 `dependencies`（非 devDependencies）中，以便打包进 Electron
 
@@ -920,25 +925,17 @@ model         "claude-opus-4-5"            [项目] → 全局
 
 ## 模块 P：项目发现体验完善
 
-> 来源：J-1 后端接口实现后的体验后续——初次打开为空、排序无依据、home 目录被误设为项目。
+> 来源：J-1 后端接口实现后的体验后续——初次打开为空、排序无依据、默认项目语义需统一。
 
-### P-1 /meta 不再强制 home 为项目
+### P-1 /meta 默认项目语义
 
 > 影响文件：`backend/main.py`、`src/App.tsx`
 
-**根因**：当前无 env var 时 `/meta` 回退到 `Path.home()`，前端将 home 目录设为 `projectPath`，ProjectSelector 显示错误的"当前项目"。
+**产品决策更新（2026-05-15）**：当前无 env var 时 `/meta` 回退到 home 目录是可接受行为。cc-steward 将 `~` 视为合法默认项目上下文，而不是空项目选择。
 
-- [x] **P-1-1** `/meta` 无 env var 时 `project_path` 返回 `null`（或不含该字段）
-  ```python
-  # 旧
-  if not project_path:
-      project_path = str(Path.home())
+- [x] **P-1-1** `/meta` 无 env var 时 `project_path` 返回 home 目录，避免启动后没有可用项目上下文
 
-  # 新
-  # project_path 保持 None，返回体中不含该字段或值为 null
-  ```
-
-- [x] **P-1-2** 前端 `App.tsx` 已有 `if (d.project_path) setProjectPath(d.project_path)` 条件判断，无需改动；确认 `projectPath` 初始值为 `undefined` 时 ProjectSelector 显示"未选择项目"。
+- [x] **P-1-2** 前端将返回的 home 目录作为当前项目；`projectPath` 初始 `undefined` 仅表示 meta 尚未加载。
 
 ---
 

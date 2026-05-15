@@ -49,14 +49,14 @@ export interface ApiFileDetail {
 }
 
 export interface ApiSyncItem {
-  status: 'added' | 'check' | 'unsupported' | 'not_added'
+  status: 'added' | 'check' | 'unsupported' | 'not_added' | 'conflict'
   type: 'Instruction' | 'Skill' | 'Subagent' | 'Hook' | 'Command' | 'Settings' | 'MCP' | 'Plugin'
   name: string
   source: string
   target: string
   notes: string
   warnings?: string[]
-  dry_run_action?: 'would_write' | 'would_skip' | 'skip_unsupported' | 'unknown'
+  dry_run_action?: 'would_write' | 'would_skip' | 'would_overwrite' | 'skip_unsupported' | 'unknown'
 }
 
 export interface ApiSyncScanResult {
@@ -73,6 +73,7 @@ export interface ApiSyncDryRunResult {
   items: ApiSyncItem[]
   would_write: string[]
   would_skip: string[]
+  would_overwrite: string[]
 }
 
 export interface ApiSyncResult {
@@ -80,6 +81,8 @@ export interface ApiSyncResult {
   items: ApiSyncItem[]
   written: string[]
   skipped: string[]
+  overwritten: string[]
+  backups: Array<{ target: string; backup: string }>
   errors?: string[]
 }
 

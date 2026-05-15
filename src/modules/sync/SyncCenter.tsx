@@ -14,12 +14,13 @@ type Stage =
   | { kind: 'plan_done'; plan: ApiSyncPlan }
   | { kind: 'dry_running' }
   | { kind: 'dry_run_done'; dryRun: ApiSyncDryRunResult; plan: ApiSyncPlan }
-  | { kind: 'executing' }
-  | { kind: 'execute_done'; result: ApiSyncResult; plan: ApiSyncPlan }
+  | { kind: 'executing'; dryRun: ApiSyncDryRunResult; plan: ApiSyncPlan }
+  | { kind: 'execute_done'; result: ApiSyncResult; dryRun: ApiSyncDryRunResult; plan: ApiSyncPlan }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   added:       { label: '待同步',       color: 'text-green-700 bg-green-50' },
   check:       { label: '需人工检查',   color: 'text-yellow-700 bg-yellow-50' },
+  conflict:    { label: '有冲突',       color: 'text-orange-700 bg-orange-50' },
   unsupported: { label: '不可迁移',     color: 'text-text-tertiary bg-surface-base' },
   not_added:   { label: '已同步',       color: 'text-text-tertiary bg-surface-base' },
 }
@@ -27,6 +28,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
 const DRY_RUN_LABEL: Record<string, { label: string; color: string }> = {
   would_write:      { label: '将写入',   color: 'text-green-700 bg-green-50' },
   would_skip:       { label: '将跳过',   color: 'text-text-tertiary bg-surface-base' },
+  would_overwrite:  { label: '将覆盖',   color: 'text-orange-700 bg-orange-50' },
   skip_unsupported: { label: '不可迁移', color: 'text-text-tertiary bg-surface-base' },
   unknown:          { label: '未知',     color: 'text-text-tertiary bg-surface-base' },
 }
@@ -88,11 +90,13 @@ export function SyncCenter() {
   }
 
   const runExecute = async (plan: ApiSyncPlan) => {
-    setStage({ kind: 'executing' })
+    if (stage.kind !== 'dry_run_done') return
+    const dryRun = stage.dryRun
+    setStage({ kind: 'executing', dryRun, plan })
     try {
       const result = await api.sync.execute(scope, projectPath, overwrite)
-      setStage({ kind: 'execute_done', result, plan })
-      pushToast({ kind: 'success', message: `同步完成：写入 ${result.written.length} 项` })
+      setStage({ kind: 'execute_done', result, dryRun, plan })
+      pushToast({ kind: 'success', message: `同步完成：写入 ${result.written.length} 项，覆盖 ${result.overwritten.length} 项` })
     } catch (e) {
       pushToast({ kind: 'error', message: `同步失败：${e instanceof Error ? e.message : String(e)}` })
       setStage(s => s.kind === 'executing' ? { kind: 'idle' } : s)
@@ -100,10 +104,6 @@ export function SyncCenter() {
   }
 
   const isLoading = ['scanning', 'planning', 'dry_running', 'executing'].includes(stage.kind)
-  const writableCount = stage.kind === 'plan_done' || stage.kind === 'dry_run_done' || stage.kind === 'execute_done'
-    ? (stage.kind === 'plan_done' ? stage.plan : stage.plan).stats.migratable
-    : 0
-
   return (
     <div className="flex-1 overflow-auto p-6 animate-fade-in">
       <div className="mb-6">
@@ -215,7 +215,7 @@ export function SyncCenter() {
                   <div className="px-4 py-3 border-t border-border-subtle bg-surface-base flex items-center justify-end">
                     <button
                       onClick={() => runDryRun(plan)}
-                      disabled={isLoading || plan.stats.migratable === 0}
+                      disabled={isLoading || (plan.stats.migratable === 0 && (!overwrite || plan.stats.conflicts === 0))}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-blue text-white rounded-lg text-xs hover:bg-blue-600 transition-colors disabled:opacity-50"
                     >
                       预演（Dry Run）<ArrowRight size={12} />
@@ -253,6 +253,7 @@ export function SyncCenter() {
                 />
                 <div className="px-4 py-2 bg-surface-base border-t border-border-subtle flex items-center gap-4 text-xs">
                   <span className="text-green-600">将写入 {dr.would_write.length} 项</span>
+                  <span className="text-orange-600">将覆盖 {dr.would_overwrite.length} 项</span>
                   <span className="text-text-tertiary">将跳过 {dr.would_skip.length} 项</span>
                 </div>
                 {stage.kind === 'dry_run_done' && (
@@ -260,11 +261,11 @@ export function SyncCenter() {
                     <span className="text-xs text-text-tertiary">确认无误后执行</span>
                     <button
                       onClick={() => runExecute(plan)}
-                      disabled={isLoading || dr.would_write.length === 0}
+                      disabled={isLoading || (dr.would_write.length + dr.would_overwrite.length) === 0}
                       className="flex items-center gap-1.5 px-4 py-1.5 bg-accent-blue text-white rounded-lg text-xs hover:bg-blue-600 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw size={12} />
-                      执行同步（{dr.would_write.length} 项）
+                      执行同步（{dr.would_write.length + dr.would_overwrite.length} 项）
                     </button>
                   </div>
                 )}
@@ -338,7 +339,7 @@ function ScanItemsTable({
         const statusConf = showDryRunAction && item.dry_run_action
           ? DRY_RUN_LABEL[item.dry_run_action] ?? DRY_RUN_LABEL.unknown
           : STATUS_LABEL[item.status] ?? STATUS_LABEL.not_added
-        const willOverwrite = overwrite && item.dry_run_action === 'would_skip' && item.status !== 'unsupported'
+        const willOverwrite = item.dry_run_action === 'would_overwrite'
 
         return (
           <div key={rowKey}>
@@ -447,6 +448,8 @@ function UnsupportedGroup({
 function ExecuteReport({ result }: { result: ApiSyncResult }) {
   const groups = [
     { label: `已写入（${result.written.length}）`, paths: result.written, color: 'text-green-600' },
+    { label: `已覆盖（${result.overwritten.length}）`, paths: result.overwritten, color: 'text-orange-600' },
+    { label: `已备份（${result.backups.length}）`, paths: result.backups.map((item) => `${item.target} → ${item.backup}`), color: 'text-blue-600' },
     { label: `已跳过（${result.skipped.length}）`, paths: result.skipped, color: 'text-text-tertiary' },
     ...(result.errors?.length ? [{ label: `失败（${result.errors.length}）`, paths: result.errors, color: 'text-red-600' }] : []),
   ].filter((g) => g.paths.length > 0)
