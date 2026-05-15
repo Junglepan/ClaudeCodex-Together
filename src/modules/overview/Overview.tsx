@@ -1,17 +1,10 @@
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { useAgents } from '@/hooks/useAgents'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import type { ApiConfigFile } from '@/core/api'
 import { CardSkeleton } from '@/components/ui/Skeleton'
-
-// ── Key files that trigger a warning when missing ────────────────────────────
-const KEY_GLOBAL: Record<string, string[]> = {
-  claude: ['global_settings'],
-  codex:  ['global_config'],
-}
 
 // ── Global layer row definitions per agent ───────────────────────────────────
 const GLOBAL_ROWS: Record<string, Array<{ key: string; label: string }>> = {
@@ -62,6 +55,29 @@ const COMPARISON_ROWS: Array<{
 
 type SyncStatus = 'aligned' | 'can_migrate' | 'pending_import' | 'unconfigured' | 'na'
 
+function existing(files: ApiConfigFile[], key: string) {
+  return files.find((file) => file.key === key)?.exists ?? false
+}
+
+function healthIssues(agentId: string, files: ApiConfigFile[], allFiles: Record<string, ApiConfigFile[]>, hasProject: boolean): string[] {
+  const issues: string[] = []
+  if (agentId === 'claude') {
+    if (!existing(files, 'global_settings')) issues.push('全局 settings.json 未配置')
+    if (!existing(files, 'global_instructions')) issues.push('全局 CLAUDE.md 未配置')
+  }
+  if (agentId === 'codex') {
+    if (!existing(files, 'global_config')) issues.push('全局 config.toml 未配置')
+    if (!existing(files, 'global_instructions')) issues.push('全局 AGENTS.md 未配置')
+  }
+  if (hasProject) {
+    const claudeProject = existing(allFiles.claude ?? [], 'project_instructions')
+    const codexProject = existing(allFiles.codex ?? [], 'project_instructions')
+    if (agentId === 'claude' && codexProject && !claudeProject) issues.push('项目 CLAUDE.md 未同步')
+    if (agentId === 'codex' && claudeProject && !codexProject) issues.push('项目 AGENTS.md 未同步')
+  }
+  return issues
+}
+
 function getSyncStatus(claudeFile?: ApiConfigFile, codexFile?: ApiConfigFile, codexNA = false): SyncStatus {
   if (codexNA) return 'na'
   const c = claudeFile?.exists ?? false
@@ -105,6 +121,7 @@ export function Overview() {
                 key={agent.id}
                 agent={agent}
                 files={filesByAgent[agent.id] ?? []}
+                filesByAgent={filesByAgent}
                 projectPath={projectPath}
               />
             ))}
@@ -125,21 +142,20 @@ export function Overview() {
 function AgentCard({
   agent,
   files,
+  filesByAgent,
   projectPath,
 }: {
   agent: ReturnType<typeof agentRegistry.getAll>[number]
   files: ApiConfigFile[]
+  filesByAgent: Record<string, ApiConfigFile[]>
   projectPath?: string
 }) {
   const navigate = useNavigate()
   const globalRows  = GLOBAL_ROWS[agent.id]  ?? []
   const projectRows = PROJECT_ROWS[agent.id] ?? []
 
-  const keyFiles    = KEY_GLOBAL[agent.id] ?? []
-  const missingKeys = keyFiles.filter((k) => {
-    const f = files.find((f) => f.key === k)
-    return !f?.exists
-  })
+  const issues = healthIssues(agent.id, files, filesByAgent, Boolean(projectPath))
+  const issueText = issues.length > 1 ? `${issues[0]}，另有 ${issues.length - 1} 项需关注` : issues[0]
 
   return (
     <div className="bg-surface-card border border-border-default rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
@@ -189,13 +205,13 @@ function AgentCard({
       </div>
 
       {/* Warning bar */}
-      {missingKeys.length > 0 && (
+      {issues.length > 0 && (
         <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-center gap-2">
           <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-          <span className="text-2xs text-amber-700">关键配置文件未找到，{agent.shortName} 可能未初始化</span>
+          <span className="text-2xs text-amber-700">{issueText}</span>
         </div>
       )}
-      {missingKeys.length === 0 && files.length > 0 && (
+      {issues.length === 0 && files.length > 0 && (
         <div className="px-4 py-2 bg-green-50 border-t border-green-200 flex items-center gap-2">
           <CheckCircle2 size={12} className="text-green-500 flex-shrink-0" />
           <span className="text-2xs text-green-700">配置完整</span>

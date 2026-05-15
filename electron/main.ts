@@ -147,6 +147,11 @@ function buildAppMenu() {
           accelerator: 'CmdOrCtrl+B',
           click: () => mainWindow?.webContents.send('cct:menu-toggle-sidebar'),
         },
+        {
+          label: '切换主题',
+          accelerator: 'Shift+CmdOrCtrl+D',
+          click: () => mainWindow?.webContents.send('cct:menu-toggle-theme'),
+        },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const },
         ...(isDev ? [
@@ -183,6 +188,10 @@ function buildAppMenu() {
           label: '偏好设置',
           accelerator: 'CmdOrCtrl+,',
           click: () => mainWindow?.webContents.send('cct:menu-navigate', '/settings'),
+        },
+        {
+          label: '在 GitHub 查看',
+          click: () => shell.openExternal('https://github.com/Junglepan/ClaudeCodex-Together'),
         },
       ],
     },
