@@ -105,7 +105,7 @@ test('codex overview aggregates token counts, tools, and models from current JSO
   const home = makeTmp()
   writeJsonl(path.join(home, '.codex', 'sessions', '2026', '05', '16', 'codex-current.jsonl'), [
     { timestamp: '2026-05-16T02:00:00.000Z', type: 'session_meta', payload: { id: 'codex-current', cwd: '/tmp/proj-a' } },
-    { timestamp: '2026-05-16T02:00:01.000Z', type: 'turn_context', payload: { cwd: '/tmp/proj-a', model: 'gpt-5.5' } },
+    { timestamp: '2026-05-16T02:00:01.000Z', type: 'turn_context', payload: { cwd: '/tmp/proj-a', model: 'gpt-5.5', collaboration_mode: { settings: { model: 'gpt-5.5' } } } },
     { timestamp: '2026-05-16T02:00:02.000Z', type: 'event_msg', payload: { type: 'user_message', message: 'Please inspect the repository' } },
     { timestamp: '2026-05-16T02:00:03.000Z', type: 'response_item', payload: { type: 'function_call', name: 'exec_command', call_id: 'call-1', arguments: '{"cmd":"pwd"}' } },
     { timestamp: '2026-05-16T02:00:04.000Z', type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-1', output: '/tmp/proj-a' } },

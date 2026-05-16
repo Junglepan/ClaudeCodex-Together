@@ -64,7 +64,7 @@ export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'size
     userMessageCount: detail.messages.filter((message) => message.role === 'user').length,
     assistantMessageCount: detail.messages.filter((message) => message.role === 'assistant').length,
     toolMessageCount: detail.messages.filter((message) => message.role === 'tool').length,
-    toolCallCount: detail.messages.filter((message) => message.role === 'tool' || message.toolName).length,
+    toolCallCount: detail.messages.filter((message) => message.toolName || (message.role === 'tool' && message.subType === 'tool_use')).length,
     failedToolCallCount: detail.messages.filter((message) => message.toolStatus === 'error').length,
     tools: [...tools.entries()]
       .map(([name, value]) => ({ name, count: value.count, failedCount: value.failedCount }))

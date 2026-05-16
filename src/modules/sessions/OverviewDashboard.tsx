@@ -64,7 +64,7 @@ export function OverviewDashboard({
         <StatCard icon={Zap} label="总 Token" value={overview ? formatTokens(totalTokens(overview.tokenUsage)) : 0} />
         <StatCard icon={Terminal} label="输入 Token" value={overview ? formatTokens(overview.tokenUsage.inputTokens) : 0} />
         <StatCard icon={Terminal} label="输出 Token" value={overview ? formatTokens(overview.tokenUsage.outputTokens) : 0} />
-        <StatCard icon={Timer} label="总耗时" value={overview ? formatDuration(overview.totalDurationMs) : '—'} />
+        <StatCard icon={Timer} label="总耗时" value={overview && overview.totalDurationMs > 0 ? formatDuration(overview.totalDurationMs) : '—'} />
       </div>
 
       {/* Agent breakdown */}

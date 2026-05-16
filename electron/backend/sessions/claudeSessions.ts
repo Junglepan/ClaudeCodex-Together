@@ -405,14 +405,17 @@ export function fastScanToolStats(text: string): FastScanResult {
   for (const m of text.matchAll(/"subagent_type"\s*:\s*"([^"]+)"/g)) {
     subagentNames.add(m[1])
   }
-  // Models: "model":"claude-xxx" on assistant messages
-  for (const m of text.matchAll(/"model"\s*:\s*"(claude-[^"]+|o[0-9]+-[^"]+|gpt-[^"]+)"/g)) {
-    modelCounts.set(m[1], (modelCounts.get(m[1]) ?? 0) + 1)
-  }
   // Token/duration: per-line scan, first match only to avoid nested duplicates
   // Claude: usage.input_tokens (skip iterations[].input_tokens)
   // Codex: total_token_usage.input_tokens is cumulative — take last occurrence only
   const isCodex = text.includes('"session_meta"') || text.includes('"event_msg"')
+  // Models: Claude uses global regex; Codex uses per-line JSON.parse on turn_context
+  const modelRe = /"model"\s*:\s*"(claude-[^"]+|o[0-9]+-[^"]+|gpt-[^"]+)"/g
+  if (!isCodex) {
+    for (const m of text.matchAll(modelRe)) {
+      modelCounts.set(m[1], (modelCounts.get(m[1]) ?? 0) + 1)
+    }
+  }
   const inputTokenRe = /"input_tokens"\s*:\s*(\d+)/
   const outputTokenRe = /"output_tokens"\s*:\s*(\d+)/
   const cacheCreationRe = /"cache_creation_input_tokens"\s*:\s*(\d+)/
@@ -425,6 +428,13 @@ export function fastScanToolStats(text: string): FastScanResult {
   let codexSawIncrementalUsage = false
 
   for (const line of text.split('\n')) {
+    // Codex: extract model from turn_context via JSON.parse (avoid double-counting nested model fields)
+    if (isCodex && line.includes('"turn_context"')) {
+      const row = parseJson(line)
+      const model = typeof row?.payload?.model === 'string' ? row.payload.model : undefined
+      if (model) modelCounts.set(model, (modelCounts.get(model) ?? 0) + 1)
+      continue
+    }
     if (isCodex && line.includes('last_token_usage')) {
       const row = parseJson(line)
       const usage = row?.payload?.info?.last_token_usage
@@ -461,6 +471,9 @@ export function fastScanToolStats(text: string): FastScanResult {
     tokenUsage.inputTokens = codexLastInput
     tokenUsage.outputTokens = codexLastOutput
   }
+  if (!isCodex) {
+    tokenUsage.inputTokens += tokenUsage.cacheCreationTokens + tokenUsage.cacheReadTokens
+  }
 
   return { toolCounts, skillNames, subagentNames, modelCounts, tokenUsage, totalDurationMs }
 }
@@ -474,14 +487,17 @@ function topCounts(map: Map<string, number>, n: number, scale = 1): Array<{ name
 
 function extractTokenUsage(usage: any): TokenUsage | undefined {
   if (!usage || typeof usage !== 'object') return undefined
-  const input = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
+  const rawInput = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
   const output = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0
-  if (input === 0 && output === 0) return undefined
+  const cacheCreation = typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0
+  const cacheRead = typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0
+  const totalInput = rawInput + cacheCreation + cacheRead
+  if (totalInput === 0 && output === 0) return undefined
   return {
-    inputTokens: input,
+    inputTokens: totalInput,
     outputTokens: output,
-    cacheCreationTokens: typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0,
-    cacheReadTokens: typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0,
+    cacheCreationTokens: cacheCreation,
+    cacheReadTokens: cacheRead,
   }
 }
 

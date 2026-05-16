@@ -64,42 +64,52 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
 }
 
 async function readCodexSummary(filePath: string): Promise<SessionSummary | null> {
+  const SCAN_LIMIT = 1024 * 1024
+  const PEEK_BYTES = 8192
   try {
     const stat = await fs.stat(filePath)
-    const fullText = await fs.readFile(filePath, 'utf8').catch(() => '')
-    if (!fullText) return null
+    const fd = await fs.open(filePath, 'r')
+    try {
+      const scanSize = Math.min(stat.size, SCAN_LIMIT)
+      const buf = Buffer.alloc(scanSize)
+      await fd.read(buf, 0, scanSize, 0)
+      const scanText = buf.toString('utf8')
 
-    const rows = parseRows(fullText)
-    const meta = extractMetaFast(fullText)
-    const messageCount = countConversationRows(rows)
+      const meta = extractMetaFast(scanText)
+      const peek = scanText.slice(0, PEEK_BYTES)
+      const peekLines = peek.split(/\r?\n/).filter(Boolean)
+      const peekRows = peekLines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+      const title = meta.title || titleFromPeek(peekRows, filePath)
+      const messageCount = estimateMessageCount(scanText, stat.size, scanSize)
 
-    const peekRows = rows.slice(0, 200)
-    const title = meta.title || titleFromPeek(peekRows, filePath)
+      const scan = fastScanToolStats(scanText)
+      const scale = stat.size > SCAN_LIMIT ? stat.size / SCAN_LIMIT : 1
+      const toolCallCount = Math.round([...scan.toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
+      const topTools = topCounts(scan.toolCounts, 10, scale)
+      const topModels = topCounts(scan.modelCounts, 5, scale)
 
-    const scan = fastScanToolStats(fullText)
-    const toolCallCount = [...scan.toolCounts.values()].reduce((a, b) => a + b, 0)
-    const topTools = topCounts(scan.toolCounts, 10)
-    const topModels = topCounts(scan.modelCounts, 5)
-
-    return {
-      id: sessionId(filePath),
-      agent: 'codex',
-      projectPath: meta.cwd ? path.normalize(meta.cwd) : null,
-      title,
-      path: filePath,
-      messageCount,
-      updatedAt: stat.mtime.toISOString(),
-      sizeBytes: stat.size,
-      nativeId: meta.id,
-      toolCallCount,
-      topToolNames: topTools.map((t) => t.name),
-      topTools,
-      topSkillNames: [...scan.skillNames],
-      topSubagentNames: [...scan.subagentNames],
-      tokenUsage: scan.tokenUsage,
-      topModelNames: topModels.map((m) => m.name),
-      topModels,
-      totalDurationMs: scan.totalDurationMs,
+      return {
+        id: sessionId(filePath),
+        agent: 'codex',
+        projectPath: meta.cwd ? path.normalize(meta.cwd) : null,
+        title,
+        path: filePath,
+        messageCount,
+        updatedAt: stat.mtime.toISOString(),
+        sizeBytes: stat.size,
+        nativeId: meta.id,
+        toolCallCount,
+        topToolNames: topTools.map((t) => t.name),
+        topTools,
+        topSkillNames: [...scan.skillNames],
+        topSubagentNames: [...scan.subagentNames],
+        tokenUsage: scaleTokenUsage(scan.tokenUsage, scale),
+        topModelNames: topModels.map((m) => m.name),
+        topModels,
+        totalDurationMs: scan.totalDurationMs,
+      }
+    } finally {
+      await fd.close()
     }
   } catch {
     return null
@@ -149,6 +159,20 @@ function extractMeta(rows: any[]): CodexMeta {
 function normalizeCodexRow(row: any, index: number): SessionMessage[] {
   if (!row || typeof row !== 'object') return []
   const ts = typeof row.timestamp === 'string' ? row.timestamp : undefined
+
+  if (row.type === 'turn_context') {
+    const model = typeof row.payload?.model === 'string' ? row.payload.model : undefined
+    if (model) {
+      return [{
+        id: `msg-${index}-ctx`,
+        role: 'system',
+        content: '',
+        timestamp: ts,
+        model,
+      }]
+    }
+    return []
+  }
 
   if (row.type === 'event_msg') {
     const p = row.payload ?? {}
@@ -332,11 +356,31 @@ function countConversationRows(rows: any[]): number {
   return count
 }
 
-function topCounts(map: Map<string, number>, n: number): Array<{ name: string; count: number }> {
+function topCounts(map: Map<string, number>, n: number, scale = 1): Array<{ name: string; count: number }> {
   return [...map.entries()]
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]) => ({ name, count: Math.round(count * scale) }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     .slice(0, n)
+}
+
+function estimateMessageCount(scanText: string, fileSize: number, scanSize: number): number {
+  let count = 0
+  for (const line of scanText.split(/\r?\n/)) {
+    if (!line) continue
+    if (line.includes('"user_message"') || line.includes('"agent_message"')) { count++; continue }
+    if (line.includes('"function_call') || line.includes('"custom_tool_call')) count++
+  }
+  return fileSize > scanSize ? Math.round(count * (fileSize / scanSize)) : count
+}
+
+function scaleTokenUsage(usage: import('./sessionTypes').TokenUsage, scale: number): import('./sessionTypes').TokenUsage {
+  if (scale === 1) return usage
+  return {
+    inputTokens: Math.round(usage.inputTokens * scale),
+    outputTokens: Math.round(usage.outputTokens * scale),
+    cacheCreationTokens: Math.round(usage.cacheCreationTokens * scale),
+    cacheReadTokens: Math.round(usage.cacheReadTokens * scale),
+  }
 }
 
 function lastTimestamp(rows: any[]): string | undefined {
