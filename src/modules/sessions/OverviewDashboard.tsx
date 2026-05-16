@@ -1,10 +1,32 @@
-import { Activity, Clock, Database, FolderOpen, MessageSquare, Terminal, TrendingUp } from 'lucide-react'
-import type { ApiProjectSessionOverview, ApiSessionAgent, ApiSessionOverview } from '@/core/api'
+import { Activity, Clock, Cpu, Database, FolderOpen, MessageSquare, Terminal, Timer, TrendingUp, Zap } from 'lucide-react'
+import type { ApiProjectSessionOverview, ApiSessionAgent, ApiSessionOverview, ApiTokenUsage } from '@/core/api'
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatTokens(n: number) {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`
+  return `${(n / 1_000_000).toFixed(2)}M`
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainSeconds = Math.round(seconds % 60)
+  if (minutes < 60) return `${minutes}m ${remainSeconds}s`
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  return `${hours}h ${remainMinutes}m`
+}
+
+function totalTokens(t: ApiTokenUsage) {
+  return t.inputTokens + t.outputTokens
 }
 
 export function OverviewDashboard({
@@ -39,6 +61,10 @@ export function OverviewDashboard({
         <StatCard icon={Activity} label="总消息" value={overview?.totalMessages ?? 0} />
         <StatCard icon={TrendingUp} label="近 7 天活跃" value={overview?.recentSessionCount ?? 0} />
         <StatCard icon={Database} label="总占用" value={formatBytes(overview?.totalSizeBytes ?? 0)} />
+        <StatCard icon={Zap} label="总 Token" value={overview ? formatTokens(totalTokens(overview.tokenUsage)) : 0} />
+        <StatCard icon={Terminal} label="输入 Token" value={overview ? formatTokens(overview.tokenUsage.inputTokens) : 0} />
+        <StatCard icon={Terminal} label="输出 Token" value={overview ? formatTokens(overview.tokenUsage.outputTokens) : 0} />
+        <StatCard icon={Timer} label="总耗时" value={overview && overview.totalDurationMs > 0 ? formatDuration(overview.totalDurationMs) : '—'} />
       </div>
 
       {/* Agent breakdown */}
@@ -75,9 +101,56 @@ export function OverviewDashboard({
         </div>
       )}
 
-      {/* Top tools & skills */}
-      {overview && (overview.topTools.length > 0 || overview.topSkills.length > 0) && (
-        <div className="grid grid-cols-2 gap-3">
+      {/* Token breakdown + Model distribution */}
+      {overview && (totalTokens(overview.tokenUsage) > 0 || overview.topModels.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {totalTokens(overview.tokenUsage) > 0 && (
+            <div className="border border-border-default bg-surface-card rounded-lg p-4">
+              <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
+                <Zap size={13} />
+                Token 分布
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-lg font-bold text-text-primary">{formatTokens(overview.tokenUsage.inputTokens)}</div>
+                  <div className="text-2xs text-text-tertiary">输入</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-text-primary">{formatTokens(overview.tokenUsage.outputTokens)}</div>
+                  <div className="text-2xs text-text-tertiary">输出</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-emerald-600">{formatTokens(overview.tokenUsage.cacheReadTokens)}</div>
+                  <div className="text-2xs text-text-tertiary">缓存读取</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-amber-600">{formatTokens(overview.tokenUsage.cacheCreationTokens)}</div>
+                  <div className="text-2xs text-text-tertiary">缓存创建</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {overview.topModels.length > 0 && (
+            <div className="border border-border-default bg-surface-card rounded-lg p-4">
+              <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
+                <Cpu size={13} />
+                模型分布
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {overview.topModels.slice(0, 8).map((m) => (
+                  <span key={m.name} className="px-2 py-1 rounded-md bg-indigo-50 text-2xs text-indigo-700">
+                    {m.name} · {m.count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Top tools, skills & subagents */}
+      {overview && (overview.topTools.length > 0 || overview.topSkills.length > 0 || overview.topSubagents.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {overview.topTools.length > 0 && (
             <div className="border border-border-default bg-surface-card rounded-lg p-4">
               <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
@@ -102,6 +175,21 @@ export function OverviewDashboard({
               <div className="flex flex-wrap gap-1.5">
                 {overview.topSkills.slice(0, 8).map((s) => (
                   <span key={s.name} className="px-2 py-1 rounded-md bg-purple-50 text-2xs text-purple-700">
+                    {s.name} · {s.count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {overview.topSubagents.length > 0 && (
+            <div className="border border-border-default bg-surface-card rounded-lg p-4">
+              <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
+                <Activity size={13} />
+                子代理
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {overview.topSubagents.slice(0, 8).map((s) => (
+                  <span key={s.name} className="px-2 py-1 rounded-md bg-teal-50 text-2xs text-teal-700">
                     {s.name} · {s.count}
                   </span>
                 ))}

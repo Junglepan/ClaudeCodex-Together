@@ -174,12 +174,24 @@ cc-steward 不再启动 Python/FastAPI 后端，也不监听 localhost 业务端
 
 后端位于 `electron/backend/sessions/`：
 
-- `claudeSessions.ts`：Claude 会话发现 — 递归扫描 `~/.claude/projects/**/*.jsonl`（跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，过滤 <200 字节文件）。轻量列表只读 stat + 前 4KB 提取标题/项目路径；详情支持分页（offset/limit）。元数据行（permission-mode、file-history-snapshot、attachment、ai-title 等 8 种）自动过滤。`tool_use`/`tool_result` content blocks 拆分为独立消息，thinking blocks 跳过。
-- `codexSessions.ts`：Codex 会话发现 — 扫描 `~/.codex/sessions/`，独立解析器支持 Codex JSONL 格式（session_meta / event_msg / response_item）。`extractMetaFast` 使用 regex 提取 cwd/id/title（避免 JSON.parse 22KB+ 的 session_meta 行）。支持 function_call、function_call_output、custom_tool_call 等工具消息。
-- `sessionAnalytics.ts`：统计聚合 — `buildSessionStats`（从消息构建工具/技能/子代理统计）、`aggregateProjectsFromSummaries`/`buildOverviewFromSummaries`（从轻量 Summary 聚合，不需要读取全部消息）。
+- `claudeSessions.ts`：Claude 会话发现 — 递归扫描 `~/.claude/projects/**/*.jsonl`（跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，过滤 <200 字节文件）。轻量列表只读 stat + 前 1MB（`SCAN_LIMIT`）通过 `fastScanToolStats` 正则扫描提取工具/技能/子代理统计（技能从 `"name":"Skill"..."skill":"xxx"` 提取，子代理从 `"subagent_type":"xxx"` 提取）。详情支持分页（offset/limit），`normalizeMessages` 从 tool_use blocks 的 input 字段精确提取 `skillName`/`subagentName`。元数据行（permission-mode 等 8 种）自动过滤。`tool_use`/`tool_result` content blocks 拆分为独立消息，thinking blocks 跳过。
+- `codexSessions.ts`：Codex 会话发现 — 扫描 `~/.codex/sessions/`，独立解析器支持 Codex JSONL 格式（session_meta / event_msg / response_item）。`extractMetaFast` 使用 regex 提取 cwd/id/title（避免 JSON.parse 22KB+ 的 session_meta 行）。Summary 层与 Claude 相同只读前 1MB + `fastScanToolStats` + 缩放（1056ms → 111ms）。model 从 `turn_context.payload.model` 提取（per-line JSON.parse 避免 `collaboration_mode.settings.model` 重复计数）。token 从 `event_msg.token_count.info.last_token_usage` 累加（`cached_input_tokens` 映射为 `cacheReadTokens`）。
+- `sessionAnalytics.ts`：统计聚合 — `buildSessionStats`（从消息构建工具/技能/子代理/Token/模型/耗时统计）、`aggregateProjectsFromSummaries`/`buildOverviewFromSummaries`（从轻量 Summary 聚合，不需要读取全部消息，聚合 token/model/duration 数据）。
+- `tokenUtils.ts`：Token 工具函数 — `emptyTokenUsage`/`addTokenUsage`，避免 claudeSessions ↔ sessionAnalytics 循环依赖。
 - `sessionSearch.ts`：全文搜索 — 遍历会话消息查找匹配，支持角色和工具名过滤，`maxResults` 上限 100，单文件 2MB 跳过。
 - `sessionTrash.ts`：软删除 — 移动到回收区并写 manifest.json。
 - `sessionWatchPaths.ts`：返回需要监听的目录路径。
+
+**Token 口径统一（Claude vs Codex）：**
+
+Claude `input_tokens` 仅含新增（未缓存）输入；Codex `input_tokens` 含全部输入（包括缓存命中）。为统一展示，Claude 的 `inputTokens` = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，Codex 直接使用原始 `input_tokens`。`cacheReadTokens` 分别映射自 Claude `cache_read_input_tokens` / Codex `cached_input_tokens`。
+
+**数据提取两层策略：**
+
+| 层 | 方法 | 提取内容 |
+|---|---|---|
+| Summary（列表） | `fastScanToolStats` regex 扫描前 1MB | 工具名、技能名、子代理名、模型名、token 用量、turn 耗时 |
+| Detail（详情） | `normalizeMessages` + JSON.parse | 同上 + 结构化 `message.usage`/`message.model`/`durationMs` |
 
 **会话 ID：** `SHA1(agent:absolutePath)`，稳定且跨平台唯一。**Native ID：** 从文件名提取 UUID，用于 `claude --resume` 命令。
 

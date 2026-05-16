@@ -5,6 +5,33 @@
 
 ---
 
+## [1.3.0] — 2026-05-16
+
+### 新增
+- **Token 用量统计**：从 JSONL 的 `message.usage` 结构化提取 input/output/cache_creation/cache_read tokens，概览仪表盘展示总 Token、输入/输出 Token、Token 分布（含缓存读取/创建）卡片；右侧会话统计面板展示详细 Token 用量
+- **模型分布统计**：从 assistant 消息的 `message.model` 字段（Claude）和 `turn_context.payload.model`（Codex）提取模型名称，概览仪表盘展示「模型分布」卡片（indigo 标签），右侧面板展示会话级模型使用
+- **Turn 耗时统计**：从 `type: "system", subtype: "turn_duration"` 行提取 `durationMs`（仅 Claude），概览展示总耗时，右侧面板展示总耗时和平均轮次耗时；Codex 无可靠 duration 字段时展示 "—"
+- **Summary 层快速扫描**：`fastScanToolStats` 新增 model/token/duration 提取，Summary 列表不需要全量解析即可获得上述统计数据
+- **Detail 层结构化提取**：`normalizeMessages` 从 assistant 消息提取 `model`/`tokenUsage`，从 system/turn_duration 提取 `durationMs`，`buildSessionStats` 聚合为 `models`/`tokenUsage`/`turnCount`/`avgTurnDurationMs`
+- **SessionSummary 新增 `topTools`/`topModels`**：携带真实调用次数，Overview 聚合按次数累加（而非按会话出现次数计数）
+
+### 改进
+- **Token 口径统一**：Claude `inputTokens` 从「仅新增输入」改为「总输入 = input + cache_read + cache_creation」，与 Codex `input_tokens`（已含缓存）对齐，两个 Agent 的数值现在可直接对比
+- **Codex 列表性能 10x 提升**：`readCodexSummary` 从全量读取 + 全量 JSON.parse 改为只读前 1MB + regex 快扫 + 线性缩放（1056ms → 111ms）
+- **SessionStats 扩展**：新增 `tokenUsage`、`models`、`totalDurationMs`、`turnCount`、`avgTurnDurationMs` 字段
+- **SessionSummary 扩展**：新增 `tokenUsage`、`topModelNames`、`totalDurationMs`、`topTools`、`topModels` 字段
+- **SessionOverview 扩展**：新增 `tokenUsage`、`topModels`、`totalDurationMs` 字段
+- **消除循环依赖**：`emptyTokenUsage` 提取到独立的 `tokenUtils.ts`
+
+### 修复
+- **Codex model 双倍计数**：`turn_context` 行中 `payload.model` 和 `collaboration_mode.settings.model` 被全局 regex 匹配两次；改为 per-line JSON.parse 只提取 `payload.model`
+- **Codex toolCallCount 翻倍**：`buildSessionStats` 将 `tool_use` 和 `tool_result` 都算作工具调用；改为只计 `subType === 'tool_use'` 或有 `toolName` 的消息
+- **Codex detail 层 model 为空**：`normalizeCodexRow` 增加 `turn_context` 处理，提取 model 到 system 消息
+- **Codex token 累计值误用**：`total_token_usage` 是累计值而非增量值，改用 `last_token_usage` 逐行累加
+- **Codex 总耗时显示 "0ms"**：Codex 无 `turn_duration` 字段时改为展示 "—"
+
+---
+
 ## [1.2.0] — 2026-05-16
 
 ### 改进
@@ -24,6 +51,8 @@
 - **空消息过滤**：Claude JSONL 元数据行（permission-mode、file-history-snapshot、attachment、ai-title、last-prompt、queue-operation、summary、result）不再显示为空消息
 - **工具消息拆分**：`tool_use` 和 `tool_result` content blocks 现在拆分为独立消息，分别以蓝色（调用）和琥珀色（结果）样式展示；错误结果显示红色
 - **thinking block 过滤**：AI 思考块不再显示在对话中
+- **技能/子代理名称误识别**：修复 skill 和 subagent 统计使用宽泛正则匹配自然语言（导致出现 "should"、"to"、"based" 等垃圾名称）；改为从 JSON 结构化字段（`"skill":"name"`、`"subagent_type":"name"`）精确提取
+- **工具统计概览归零**：修复 `fastScanToolStats` 正则扫描策略，Summary 层现在正确携带工具/技能/子代理数据，Overview 仪表盘不再全部为 0
 
 ### 新增
 - **Codex 会话解析器**（`codexSessions.ts`）：完整支持 Codex JSONL 格式（session_meta / event_msg / response_item），正确提取项目路径和会话 ID

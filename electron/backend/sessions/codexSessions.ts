@@ -3,10 +3,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildSessionStats } from './sessionAnalytics'
-import { collectSessionFiles } from './claudeSessions'
+import { collectSessionFiles, fastScanToolStats } from './claudeSessions'
 import type { SessionDetail, SessionMessage, SessionSummary } from './sessionTypes'
-
-const SUMMARY_PEEK_BYTES = 8192
 
 export function codexSessionRoot(homeDir = os.homedir()) {
   return path.join(homeDir, '.codex', 'sessions')
@@ -49,6 +47,15 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
     updatedAt,
     sizeBytes: stat.size,
     nativeId: meta.id,
+    toolCallCount: stats.toolCallCount,
+    topToolNames: stats.tools.map((t) => t.name),
+    topTools: stats.tools.map((t) => ({ name: t.name, count: t.count })),
+    topSkillNames: stats.skills.map((s) => s.name),
+    topSubagentNames: stats.subagents.map((s) => s.name),
+    tokenUsage: stats.tokenUsage,
+    topModelNames: stats.models.map((m) => m.name),
+    topModels: stats.models,
+    totalDurationMs: stats.totalDurationMs,
     messages,
     stats,
     rawPreview: rawText.slice(0, 4000),
@@ -57,27 +64,52 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
 }
 
 async function readCodexSummary(filePath: string): Promise<SessionSummary | null> {
+  const SCAN_LIMIT = 1024 * 1024
+  const PEEK_BYTES = 8192
   try {
     const stat = await fs.stat(filePath)
-    const fullText = await fs.readFile(filePath, 'utf8').catch(() => '')
-    if (!fullText) return null
+    const fd = await fs.open(filePath, 'r')
+    try {
+      const scanSize = Math.min(stat.size, SCAN_LIMIT)
+      const buf = Buffer.alloc(scanSize)
+      await fd.read(buf, 0, scanSize, 0)
+      const scanText = buf.toString('utf8')
 
-    const meta = extractMetaFast(fullText)
-    const messageCount = countConversationRows(fullText)
+      const meta = extractMetaFast(scanText)
+      const peek = scanText.slice(0, PEEK_BYTES)
+      const peekLines = peek.split(/\r?\n/).filter(Boolean)
+      const peekRows = peekLines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+      const title = meta.title || titleFromPeek(peekRows, filePath)
+      const messageCount = estimateMessageCount(scanText, stat.size, scanSize)
 
-    const peekRows = parseRows(fullText.slice(0, 64000))
-    const title = meta.title || titleFromPeek(peekRows, filePath)
+      const scan = fastScanToolStats(scanText)
+      const scale = stat.size > SCAN_LIMIT ? stat.size / SCAN_LIMIT : 1
+      const toolCallCount = Math.round([...scan.toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
+      const topTools = topCounts(scan.toolCounts, 10, scale)
+      const topModels = topCounts(scan.modelCounts, 5, scale)
 
-    return {
-      id: sessionId(filePath),
-      agent: 'codex',
-      projectPath: meta.cwd ? path.normalize(meta.cwd) : null,
-      title,
-      path: filePath,
-      messageCount,
-      updatedAt: stat.mtime.toISOString(),
-      sizeBytes: stat.size,
-      nativeId: meta.id,
+      return {
+        id: sessionId(filePath),
+        agent: 'codex',
+        projectPath: meta.cwd ? path.normalize(meta.cwd) : null,
+        title,
+        path: filePath,
+        messageCount,
+        updatedAt: stat.mtime.toISOString(),
+        sizeBytes: stat.size,
+        nativeId: meta.id,
+        toolCallCount,
+        topToolNames: topTools.map((t) => t.name),
+        topTools,
+        topSkillNames: [...scan.skillNames],
+        topSubagentNames: [...scan.subagentNames],
+        tokenUsage: scaleTokenUsage(scan.tokenUsage, scale),
+        topModelNames: topModels.map((m) => m.name),
+        topModels,
+        totalDurationMs: scan.totalDurationMs,
+      }
+    } finally {
+      await fd.close()
     }
   } catch {
     return null
@@ -128,6 +160,20 @@ function normalizeCodexRow(row: any, index: number): SessionMessage[] {
   if (!row || typeof row !== 'object') return []
   const ts = typeof row.timestamp === 'string' ? row.timestamp : undefined
 
+  if (row.type === 'turn_context') {
+    const model = typeof row.payload?.model === 'string' ? row.payload.model : undefined
+    if (model) {
+      return [{
+        id: `msg-${index}-ctx`,
+        role: 'system',
+        content: '',
+        timestamp: ts,
+        model,
+      }]
+    }
+    return []
+  }
+
   if (row.type === 'event_msg') {
     const p = row.payload ?? {}
     if (p.type === 'user_message') {
@@ -139,6 +185,21 @@ function normalizeCodexRow(row: any, index: number): SessionMessage[] {
       const text = typeof p.message === 'string' ? p.message : ''
       if (!text.trim()) return []
       return [{ id: `msg-${index}`, role: 'assistant', content: text, timestamp: ts }]
+    }
+    if (p.type === 'token_count' && p.info?.last_token_usage) {
+      const u = p.info.last_token_usage
+      return [{
+        id: `msg-${index}-tokens`,
+        role: 'system',
+        content: '',
+        timestamp: ts,
+        tokenUsage: {
+          inputTokens: typeof u.input_tokens === 'number' ? u.input_tokens : 0,
+          outputTokens: typeof u.output_tokens === 'number' ? u.output_tokens : 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: typeof u.cached_input_tokens === 'number' ? u.cached_input_tokens : 0,
+        },
+      }]
     }
     return []
   }
@@ -266,13 +327,60 @@ function titleFromPeek(rows: any[], filePath: string): string {
   return path.basename(filePath)
 }
 
-function countConversationRows(text: string): number {
+function countConversationRows(rows: any[]): number {
   let count = 0
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    if (line.includes('"user_message"') || line.includes('"agent_message"') || line.includes('"function_call"')) count++
+  for (const row of rows) {
+    const p = row?.payload ?? {}
+    if (row?.type === 'event_msg' && (p.type === 'user_message' || p.type === 'agent_message')) {
+      count++
+      continue
+    }
+    if (row?.type !== 'response_item') continue
+    if (p.type === 'message') {
+      const role = p.role
+      if (role === 'user' || role === 'assistant') {
+        const content = extractResponseContent(p.content)
+        if (content.trim()) count++
+      }
+      continue
+    }
+    if (
+      p.type === 'function_call'
+      || p.type === 'function_call_output'
+      || p.type === 'custom_tool_call'
+      || p.type === 'custom_tool_call_output'
+    ) {
+      count++
+    }
   }
   return count
+}
+
+function topCounts(map: Map<string, number>, n: number, scale = 1): Array<{ name: string; count: number }> {
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count: Math.round(count * scale) }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, n)
+}
+
+function estimateMessageCount(scanText: string, fileSize: number, scanSize: number): number {
+  let count = 0
+  for (const line of scanText.split(/\r?\n/)) {
+    if (!line) continue
+    if (line.includes('"user_message"') || line.includes('"agent_message"')) { count++; continue }
+    if (line.includes('"function_call') || line.includes('"custom_tool_call')) count++
+  }
+  return fileSize > scanSize ? Math.round(count * (fileSize / scanSize)) : count
+}
+
+function scaleTokenUsage(usage: import('./sessionTypes').TokenUsage, scale: number): import('./sessionTypes').TokenUsage {
+  if (scale === 1) return usage
+  return {
+    inputTokens: Math.round(usage.inputTokens * scale),
+    outputTokens: Math.round(usage.outputTokens * scale),
+    cacheCreationTokens: Math.round(usage.cacheCreationTokens * scale),
+    cacheReadTokens: Math.round(usage.cacheReadTokens * scale),
+  }
 }
 
 function lastTimestamp(rows: any[]): string | undefined {

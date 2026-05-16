@@ -40,6 +40,13 @@ export interface SessionsOverviewRequest {
   scope: 'user' | 'project'
 }
 
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
 export interface SessionSummary {
   id: string
   agent: SessionAgent
@@ -50,6 +57,15 @@ export interface SessionSummary {
   updatedAt: string
   sizeBytes: number
   nativeId?: string
+  toolCallCount: number
+  topToolNames: string[]
+  topTools: Array<{ name: string; count: number }>
+  topSkillNames: string[]
+  topSubagentNames: string[]
+  tokenUsage: TokenUsage
+  topModelNames: string[]
+  topModels: Array<{ name: string; count: number }>
+  totalDurationMs: number
 }
 
 export interface SessionMessage {
@@ -62,6 +78,9 @@ export interface SessionMessage {
   skillName?: string
   subagentName?: string
   subType?: 'tool_use' | 'tool_result'
+  model?: string
+  tokenUsage?: TokenUsage
+  durationMs?: number
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -88,6 +107,11 @@ export interface SessionStats {
   tools: Array<{ name: string; count: number; failedCount: number }>
   skills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
   subagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  tokenUsage: TokenUsage
+  models: Array<{ name: string; count: number }>
+  totalDurationMs: number
+  turnCount: number
+  avgTurnDurationMs: number
   sizeBytes: number
   updatedAt: string
 }
@@ -117,6 +141,9 @@ export interface SessionOverview {
   topTools: Array<{ name: string; count: number }>
   topSkills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
   topSubagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  tokenUsage: TokenUsage
+  topModels: Array<{ name: string; count: number }>
+  totalDurationMs: number
 }
 
 export interface DeleteSessionResult {
