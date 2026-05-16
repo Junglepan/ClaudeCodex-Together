@@ -7,6 +7,7 @@ import type { SessionAgent, SessionDetail, SessionMessage, SessionSummary } from
 
 const SESSION_EXTENSIONS = new Set(['.jsonl', '.json', '.ndjson'])
 const SUMMARY_PEEK_BYTES = 4096
+const SCAN_LIMIT = 1024 * 1024
 
 const METADATA_TYPES = new Set([
   'permission-mode', 'file-history-snapshot', 'attachment', 'ai-title',
@@ -36,9 +37,12 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
     const stat = await fs.stat(filePath)
     const fd = await fs.open(filePath, 'r')
     try {
-      const buf = Buffer.alloc(Math.min(SUMMARY_PEEK_BYTES, stat.size))
-      await fd.read(buf, 0, buf.length, 0)
-      const peek = buf.toString('utf8')
+      const scanSize = Math.min(stat.size, SCAN_LIMIT)
+      const buf = Buffer.alloc(scanSize)
+      await fd.read(buf, 0, scanSize, 0)
+      const fullScan = buf.toString('utf8')
+
+      const peek = fullScan.slice(0, SUMMARY_PEEK_BYTES)
       const lines = peek.split(/\r?\n/).filter(Boolean)
       const rows = lines.map(parseJson).filter(Boolean)
       const projectPath = firstString(rows, ['cwd', 'project_path', 'projectPath']) ?? null
@@ -46,7 +50,12 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
       const peekLines = lines.length
       const messageCount = stat.size <= SUMMARY_PEEK_BYTES
         ? peekLines
-        : Math.round(peekLines * (stat.size / buf.length))
+        : Math.round(peekLines * (stat.size / scanSize))
+
+      const { toolCounts, skillNames, subagentNames } = fastScanToolStats(fullScan)
+      const scale = stat.size > SCAN_LIMIT ? stat.size / SCAN_LIMIT : 1
+      const toolCallCount = Math.round([...toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
+
       return {
         id: sessionId(agent, filePath),
         agent,
@@ -57,6 +66,10 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
         updatedAt: stat.mtime.toISOString(),
         sizeBytes: stat.size,
         nativeId: extractNativeId(filePath),
+        toolCallCount,
+        topToolNames: topNKeys(toolCounts, 10),
+        topSkillNames: [...skillNames],
+        topSubagentNames: [...subagentNames],
       }
     } finally {
       await fd.close()
@@ -122,6 +135,10 @@ export async function readSessionDetail(agent: SessionAgent, filePath: string, p
     updatedAt,
     sizeBytes: stat.size,
     nativeId: extractNativeId(filePath),
+    toolCallCount: stats.toolCallCount,
+    topToolNames: stats.tools.map((t) => t.name),
+    topSkillNames: stats.skills.map((s) => s.name),
+    topSubagentNames: stats.subagents.map((s) => s.name),
     messages,
     stats,
     rawPreview: rawText.slice(0, 4000),
@@ -329,4 +346,29 @@ export function stripDetail(detail: SessionDetail): SessionSummary {
 
 function sortByUpdatedDesc(a: SessionSummary, b: SessionSummary) {
   return b.updatedAt.localeCompare(a.updatedAt)
+}
+
+export function fastScanToolStats(text: string) {
+  const toolCounts = new Map<string, number>()
+  const skillNames = new Set<string>()
+  const subagentNames = new Set<string>()
+
+  for (const m of text.matchAll(/"tool_use".*?"name"\s*:\s*"([A-Za-z]\w*)"/g)) {
+    toolCounts.set(m[1], (toolCounts.get(m[1]) ?? 0) + 1)
+  }
+  for (const m of text.matchAll(/"(?:function_call|custom_tool_call)"(?!_output).*?"name"\s*:\s*"([A-Za-z]\w*)"/g)) {
+    toolCounts.set(m[1], (toolCounts.get(m[1]) ?? 0) + 1)
+  }
+  for (const m of text.matchAll(/(?:Skill|Used Skill)[:\s]+([A-Za-z0-9_.-]+)/gi)) {
+    skillNames.add(m[1])
+  }
+  for (const m of text.matchAll(/(?:subagent|sub-agent)[:\s]+([A-Za-z0-9_.-]+)/gi)) {
+    subagentNames.add(m[1])
+  }
+
+  return { toolCounts, skillNames, subagentNames }
+}
+
+function topNKeys(map: Map<string, number>, n: number): string[] {
+  return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k)
 }

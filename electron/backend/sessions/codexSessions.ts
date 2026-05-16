@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildSessionStats } from './sessionAnalytics'
-import { collectSessionFiles } from './claudeSessions'
+import { collectSessionFiles, fastScanToolStats } from './claudeSessions'
 import type { SessionDetail, SessionMessage, SessionSummary } from './sessionTypes'
 
 const SUMMARY_PEEK_BYTES = 8192
@@ -49,6 +49,10 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
     updatedAt,
     sizeBytes: stat.size,
     nativeId: meta.id,
+    toolCallCount: stats.toolCallCount,
+    topToolNames: stats.tools.map((t) => t.name),
+    topSkillNames: stats.skills.map((s) => s.name),
+    topSubagentNames: stats.subagents.map((s) => s.name),
     messages,
     stats,
     rawPreview: rawText.slice(0, 4000),
@@ -68,6 +72,10 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
     const peekRows = parseRows(fullText.slice(0, 64000))
     const title = meta.title || titleFromPeek(peekRows, filePath)
 
+    const { toolCounts, skillNames, subagentNames } = fastScanToolStats(fullText)
+    const toolCallCount = [...toolCounts.values()].reduce((a, b) => a + b, 0)
+    const topToolNames = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k]) => k)
+
     return {
       id: sessionId(filePath),
       agent: 'codex',
@@ -78,6 +86,10 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
       updatedAt: stat.mtime.toISOString(),
       sizeBytes: stat.size,
       nativeId: meta.id,
+      toolCallCount,
+      topToolNames,
+      topSkillNames: [...skillNames],
+      topSubagentNames: [...subagentNames],
     }
   } catch {
     return null

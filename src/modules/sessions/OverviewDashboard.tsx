@@ -75,9 +75,9 @@ export function OverviewDashboard({
         </div>
       )}
 
-      {/* Top tools & skills */}
-      {overview && (overview.topTools.length > 0 || overview.topSkills.length > 0) && (
-        <div className="grid grid-cols-2 gap-3">
+      {/* Top tools, skills & subagents */}
+      {overview && (overview.topTools.length > 0 || overview.topSkills.length > 0 || overview.topSubagents.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {overview.topTools.length > 0 && (
             <div className="border border-border-default bg-surface-card rounded-lg p-4">
               <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
@@ -102,6 +102,21 @@ export function OverviewDashboard({
               <div className="flex flex-wrap gap-1.5">
                 {overview.topSkills.slice(0, 8).map((s) => (
                   <span key={s.name} className="px-2 py-1 rounded-md bg-purple-50 text-2xs text-purple-700">
+                    {s.name} · {s.count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {overview.topSubagents.length > 0 && (
+            <div className="border border-border-default bg-surface-card rounded-lg p-4">
+              <div className="flex items-center gap-2 text-2xs text-text-tertiary mb-3">
+                <Activity size={13} />
+                子代理
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {overview.topSubagents.slice(0, 8).map((s) => (
+                  <span key={s.name} className="px-2 py-1 rounded-md bg-teal-50 text-2xs text-teal-700">
                     {s.name} · {s.count}
                   </span>
                 ))}

@@ -66,6 +66,7 @@ export function filterSummaries(summaries: SessionSummary[], request: { agent?: 
 
 export function aggregateProjectsFromSummaries(summaries: SessionSummary[]): ProjectSessionOverview[] {
   const projects = new Map<string, ProjectSessionOverview>()
+  const projectTools = new Map<string, Map<string, number>>()
   for (const summary of summaries) {
     const key = summary.projectPath ?? '__unknown__'
     const current = projects.get(key) ?? {
@@ -80,10 +81,20 @@ export function aggregateProjectsFromSummaries(summaries: SessionSummary[]): Pro
     }
     current.sessionCount += 1
     current.messageCount += summary.messageCount
+    current.toolCallCount += summary.toolCallCount
     current.totalSizeBytes += summary.sizeBytes
     current.agentBreakdown[summary.agent] += 1
     if (!current.lastActiveAt || summary.updatedAt > current.lastActiveAt) current.lastActiveAt = summary.updatedAt
     projects.set(key, current)
+
+    const tools = projectTools.get(key) ?? new Map<string, number>()
+    for (const name of summary.topToolNames) {
+      tools.set(name, (tools.get(name) ?? 0) + 1)
+    }
+    projectTools.set(key, tools)
+  }
+  for (const [key, project] of projects.entries()) {
+    project.topTools = topCounts(projectTools.get(key) ?? new Map()).slice(0, 5)
   }
   return [...projects.values()].sort((a, b) => {
     const activeCompare = (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? '')
@@ -97,9 +108,15 @@ export function buildOverviewFromSummaries(summaries: SessionSummary[], request:
     : summaries
   const agentBreakdown = emptyAgentBreakdown()
   const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const tools = new Map<string, number>()
+  const skills = new Map<string, number>()
+  const subagents = new Map<string, number>()
 
   for (const s of relevant) {
     agentBreakdown[s.agent] += 1
+    for (const name of s.topToolNames) tools.set(name, (tools.get(name) ?? 0) + 1)
+    for (const name of s.topSkillNames) skills.set(name, (skills.get(name) ?? 0) + 1)
+    for (const name of s.topSubagentNames) subagents.set(name, (subagents.get(name) ?? 0) + 1)
   }
 
   return {
@@ -107,14 +124,14 @@ export function buildOverviewFromSummaries(summaries: SessionSummary[], request:
     projectPath: request.projectPath,
     totalSessions: relevant.length,
     totalMessages: relevant.reduce((sum, s) => sum + s.messageCount, 0),
-    totalToolCalls: 0,
+    totalToolCalls: relevant.reduce((sum, s) => sum + s.toolCallCount, 0),
     failedToolCalls: 0,
     totalSizeBytes: relevant.reduce((sum, s) => sum + s.sizeBytes, 0),
     recentSessionCount: relevant.filter((s) => Date.parse(s.updatedAt) >= recentCutoff).length,
     agentBreakdown,
     topProjects: aggregateProjectsFromSummaries(relevant).slice(0, 8),
-    topTools: [],
-    topSkills: [],
-    topSubagents: [],
+    topTools: topCounts(tools).slice(0, 8),
+    topSkills: topConfidenceCounts(skills).slice(0, 8),
+    topSubagents: topConfidenceCounts(subagents).slice(0, 8),
   }
 }

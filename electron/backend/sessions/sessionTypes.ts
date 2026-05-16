@@ -50,6 +50,10 @@ export interface SessionSummary {
   updatedAt: string
   sizeBytes: number
   nativeId?: string
+  toolCallCount: number
+  topToolNames: string[]
+  topSkillNames: string[]
+  topSubagentNames: string[]
 }
 
 export interface SessionMessage {

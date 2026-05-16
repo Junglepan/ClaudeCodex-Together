@@ -186,6 +186,10 @@ export interface ApiSessionSummary {
   updatedAt: string
   sizeBytes: number
   nativeId?: string
+  toolCallCount: number
+  topToolNames: string[]
+  topSkillNames: string[]
+  topSubagentNames: string[]
 }
 
 export interface ApiSessionMessage {
