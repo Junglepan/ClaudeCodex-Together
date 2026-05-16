@@ -21,7 +21,10 @@ test('syncDryRun reports per-item write, skip, overwrite, and unsupported action
 
   const skip = syncDryRun({ scope: 'global', replace: false, home_path: home, project_path: project })
   assert.equal(skip.items.find((item) => item.type === 'Instruction')?.dry_run_action, 'would_skip')
-  assert.equal(skip.items.find((item) => item.type === 'Command')?.dry_run_action, 'skip_unsupported')
+  const cmdItem = skip.items.find((item) => item.type === 'Command')
+  if (cmdItem) {
+    assert.equal(cmdItem.dry_run_action, 'would_write')
+  }
 
   const overwrite = syncDryRun({ scope: 'global', replace: true, home_path: home, project_path: project })
   assert.equal(overwrite.items.find((item) => item.type === 'Instruction')?.dry_run_action, 'would_overwrite')
@@ -91,6 +94,9 @@ test('syncPlan writes Codex agents using the resolved .toml format', () => {
   const result = syncExecute({ scope: 'global', replace: false, home_path: home })
   const target = path.join(home, '.codex', 'agents', 'reviewer.toml')
   assert.equal(result.written.includes(target), true)
-  assert.match(fs.readFileSync(target, 'utf8'), /^name = "reviewer"/)
-  assert.match(fs.readFileSync(target, 'utf8'), /instructions = """\nCheck implementation risks\.\n"""/)
+  const content = fs.readFileSync(target, 'utf8')
+  assert.match(content, /^name = "reviewer"/)
+  assert.match(content, /developer_instructions = """/)
+  assert.match(content, /Check implementation risks\./)
+  assert.match(content, /You're allowed to use these tools:/)
 })

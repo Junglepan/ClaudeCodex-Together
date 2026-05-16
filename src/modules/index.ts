@@ -5,7 +5,7 @@
 import { moduleRegistry } from '@/core/module-registry'
 import { overviewModule }                    from './overview'
 import { claudeConfigModule, codexConfigModule } from './agent-config'
-import { sessionsModule }                    from './sessions'
+import { claudeSessionsModule, codexSessionsModule } from './sessions'
 import { syncModule }                        from './sync'
 import { helpModule }                        from './help'
 import { settingsModule }                    from './settings'
@@ -20,7 +20,9 @@ moduleRegistry.register(overviewModule)
 // 配置管理 section (grouped under "配置管理" header)
 moduleRegistry.register(claudeConfigModule)
 moduleRegistry.register(codexConfigModule)
-moduleRegistry.register(sessionsModule)
+// 会话管理 section (grouped under "会话管理" header)
+moduleRegistry.register(claudeSessionsModule)
+moduleRegistry.register(codexSessionsModule)
 
 // Tools
 moduleRegistry.register(syncModule)
@@ -38,7 +40,8 @@ export {
   overviewModule,
   claudeConfigModule,
   codexConfigModule,
-  sessionsModule,
+  claudeSessionsModule,
+  codexSessionsModule,
   syncModule,
   helpModule,
   settingsModule,
