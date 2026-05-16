@@ -403,22 +403,40 @@ export function fastScanToolStats(text: string): FastScanResult {
   for (const m of text.matchAll(/"model"\s*:\s*"(claude-[^"]+|o[0-9]+-[^"]+|gpt-[^"]+)"/g)) {
     modelCounts.set(m[1], (modelCounts.get(m[1]) ?? 0) + 1)
   }
-  // Token usage: sum input_tokens / output_tokens from usage blocks
-  for (const m of text.matchAll(/"input_tokens"\s*:\s*(\d+)/g)) {
-    tokenUsage.inputTokens += Number(m[1])
+  // Token/duration: per-line scan, first match only to avoid nested duplicates
+  // Claude: usage.input_tokens (skip iterations[].input_tokens)
+  // Codex: total_token_usage.input_tokens is cumulative — take last occurrence only
+  const isCodex = text.includes('"session_meta"') || text.includes('"event_msg"')
+  const inputTokenRe = /"input_tokens"\s*:\s*(\d+)/
+  const outputTokenRe = /"output_tokens"\s*:\s*(\d+)/
+  const cacheCreationRe = /"cache_creation_input_tokens"\s*:\s*(\d+)/
+  const cacheReadRe = /"cache_read_input_tokens"\s*:\s*(\d+)/
+  const durationRe = /"turn_duration".*?"durationMs"\s*:\s*(\d+)/
+  // For Codex, track last total_token_usage instead of summing
+  const codexTotalRe = /"total_token_usage".*?"input_tokens"\s*:\s*(\d+).*?"output_tokens"\s*:\s*(\d+)/
+  let codexLastInput = 0
+  let codexLastOutput = 0
+
+  for (const line of text.split('\n')) {
+    if (isCodex && line.includes('total_token_usage')) {
+      const m = line.match(codexTotalRe)
+      if (m) { codexLastInput = Number(m[1]); codexLastOutput = Number(m[2]) }
+      continue
+    }
+    const inputMatch = line.match(inputTokenRe)
+    if (inputMatch) tokenUsage.inputTokens += Number(inputMatch[1])
+    const outputMatch = line.match(outputTokenRe)
+    if (outputMatch) tokenUsage.outputTokens += Number(outputMatch[1])
+    const cacheCreateMatch = line.match(cacheCreationRe)
+    if (cacheCreateMatch) tokenUsage.cacheCreationTokens += Number(cacheCreateMatch[1])
+    const cacheReadMatch = line.match(cacheReadRe)
+    if (cacheReadMatch) tokenUsage.cacheReadTokens += Number(cacheReadMatch[1])
+    const durMatch = line.match(durationRe)
+    if (durMatch) totalDurationMs += Number(durMatch[1])
   }
-  for (const m of text.matchAll(/"output_tokens"\s*:\s*(\d+)/g)) {
-    tokenUsage.outputTokens += Number(m[1])
-  }
-  for (const m of text.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g)) {
-    tokenUsage.cacheCreationTokens += Number(m[1])
-  }
-  for (const m of text.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g)) {
-    tokenUsage.cacheReadTokens += Number(m[1])
-  }
-  // Turn duration: "subtype":"turn_duration"..."durationMs":N
-  for (const m of text.matchAll(/"turn_duration".*?"durationMs"\s*:\s*(\d+)/g)) {
-    totalDurationMs += Number(m[1])
+  if (isCodex) {
+    tokenUsage.inputTokens = codexLastInput
+    tokenUsage.outputTokens = codexLastOutput
   }
 
   return { toolCounts, skillNames, subagentNames, modelCounts, tokenUsage, totalDurationMs }

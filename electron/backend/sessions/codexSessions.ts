@@ -159,6 +159,21 @@ function normalizeCodexRow(row: any, index: number): SessionMessage[] {
       if (!text.trim()) return []
       return [{ id: `msg-${index}`, role: 'assistant', content: text, timestamp: ts }]
     }
+    if (p.type === 'token_count' && p.info?.last_token_usage) {
+      const u = p.info.last_token_usage
+      return [{
+        id: `msg-${index}-tokens`,
+        role: 'system',
+        content: '',
+        timestamp: ts,
+        tokenUsage: {
+          inputTokens: typeof u.input_tokens === 'number' ? u.input_tokens : 0,
+          outputTokens: typeof u.output_tokens === 'number' ? u.output_tokens : 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: typeof u.cached_input_tokens === 'number' ? u.cached_input_tokens : 0,
+        },
+      }]
+    }
     return []
   }
 
