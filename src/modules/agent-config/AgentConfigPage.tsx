@@ -1,11 +1,14 @@
 import { useState, useCallback } from 'react'
-import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List, GitMerge } from 'lucide-react'
+import { ChevronDown, ChevronRight, File, Folder, RefreshCw, Search, LayoutGrid, List, GitMerge, Sparkles, Bot, Plug } from 'lucide-react'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
 import { useAgents, useAgentFiles } from '@/hooks/useAgents'
 import type { ApiConfigFile, ApiAgentSummary } from '@/core/api'
 import { FileDetail } from '../config-files/FileDetail'
 import { ResolvedConfigTab } from './ResolvedConfigTab'
+import { SkillsTab } from './SkillsTab'
+import { SubagentsTab } from './SubagentsTab'
+import { McpTab } from './McpTab'
 import { StatusBadge, ScopeBadge, FormatBadge } from '@/components/ui/Badges'
 import { EmptyState } from '@/components/ui/Skeleton'
 import { electronApi, isElectron } from '@/lib/electron-bridge'
@@ -20,7 +23,7 @@ interface Props {
   agentId: string
 }
 
-type Tab = 'overview' | 'files' | 'resolved'
+type Tab = 'overview' | 'files' | 'resolved' | 'skills' | 'subagents' | 'mcp'
 
 export function AgentConfigPage({ agentId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -74,6 +77,12 @@ export function AgentConfigPage({ agentId }: Props) {
           icon={<List size={13} />} label="配置明细" />
         <TabBtn active={activeTab === 'resolved'} onClick={() => setActiveTab('resolved')}
           icon={<GitMerge size={13} />} label="配置生效树" />
+        <TabBtn active={activeTab === 'skills'} onClick={() => setActiveTab('skills')}
+          icon={<Sparkles size={13} />} label="Skills" />
+        <TabBtn active={activeTab === 'subagents'} onClick={() => setActiveTab('subagents')}
+          icon={<Bot size={13} />} label="Agents" />
+        <TabBtn active={activeTab === 'mcp'} onClick={() => setActiveTab('mcp')}
+          icon={<Plug size={13} />} label="MCP" />
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -81,6 +90,12 @@ export function AgentConfigPage({ agentId }: Props) {
           <OverviewTab agentId={agentId} files={files} summary={summary} />
         ) : activeTab === 'resolved' ? (
           <ResolvedConfigTab agentId={agentId} />
+        ) : activeTab === 'skills' ? (
+          <SkillsTab agentId={agentId} />
+        ) : activeTab === 'subagents' ? (
+          <SubagentsTab agentId={agentId} />
+        ) : activeTab === 'mcp' ? (
+          <McpTab agentId={agentId} />
         ) : (
           <FilesTab agentId={agentId} />
         )}

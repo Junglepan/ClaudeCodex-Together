@@ -48,7 +48,15 @@ export interface ApiFileDetail {
   parsed_hooks?: ParsedHook[] | null
 }
 
+export interface StructuredWarnings {
+  removed_lines: string[]
+  tool_comments: string[]
+  check_lines: Array<{ line: number; content: string }>
+  manual_notes?: string[]
+}
+
 export interface ApiSyncItem {
+  id?: string
   status: 'added' | 'check' | 'unsupported' | 'not_added' | 'conflict'
   type: 'Instruction' | 'Skill' | 'Subagent' | 'Hook' | 'Command' | 'Settings' | 'MCP' | 'Plugin'
   name: string
@@ -56,7 +64,11 @@ export interface ApiSyncItem {
   target: string
   notes: string
   warnings?: string[]
+  structured_warnings?: StructuredWarnings | null
   dry_run_action?: 'would_write' | 'would_skip' | 'would_overwrite' | 'skip_unsupported' | 'unknown'
+  source_content?: string
+  target_content?: string
+  existing_content?: string
 }
 
 export interface ApiSyncScanResult {
@@ -86,6 +98,17 @@ export interface ApiSyncResult {
   errors?: string[]
 }
 
+export interface ApiValidationItem {
+  status: 'ok' | 'warning' | 'error'
+  target: string
+  type: string
+  detail: string
+}
+
+export interface ApiValidationResult {
+  items: ApiValidationItem[]
+}
+
 export interface ResolvedSettingsRow {
   key: string
   value: string
@@ -113,6 +136,33 @@ export interface ApiResolvedConfig {
   instructions: ResolvedInstruction[]
   skills: ResolvedScopeItem[]
   agents: ResolvedScopeItem[]
+}
+
+export interface ApiSkillItem {
+  name: string
+  description: string
+  source: 'global' | 'project'
+  path: string
+  content: string
+}
+
+export interface ApiSubagentItem {
+  name: string
+  description: string
+  source: 'global' | 'project'
+  path: string
+  content: string
+  format: 'md' | 'toml'
+  tools?: string[]
+}
+
+export interface ApiMcpServerItem {
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  source: 'global' | 'project'
+  origin: string
 }
 
 export interface ApiMeta {
@@ -156,18 +206,39 @@ export const api = {
     scan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
       request<ApiSyncScanResult>('sync.scan', { scope, project_path: projectPath }),
 
-    plan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncPlan>('sync.plan', { scope, project_path: projectPath }),
+    plan: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
+      request<ApiSyncPlan>('sync.plan', { scope, project_path: projectPath, replace }),
 
-    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
-      request<ApiSyncDryRunResult>('sync.dryRun', { scope, project_path: projectPath, replace }),
+    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false, itemIds?: string[]) =>
+      request<ApiSyncDryRunResult>('sync.dryRun', { scope, project_path: projectPath, replace, item_ids: itemIds }),
 
-    execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
-      request<ApiSyncResult>('sync.execute', { scope, project_path: projectPath, replace }),
+    execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false, itemIds?: string[]) =>
+      request<ApiSyncResult>('sync.execute', { scope, project_path: projectPath, replace, item_ids: itemIds }),
+
+    validate: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
+      request<ApiValidationResult>('sync.validate', { scope, project_path: projectPath }),
+
+    report: (executeResult: ApiSyncResult, validation?: ApiValidationResult) =>
+      request<string>('sync.report', { executeResult, validation }),
   },
 
   projects: {
     list: () => request<ApiProject[]>('projects.list'),
+  },
+
+  skills: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiSkillItem[]>('skills.list', { agentId, project: projectPath }),
+  },
+
+  subagents: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiSubagentItem[]>('subagents.list', { agentId, project: projectPath }),
+  },
+
+  mcp: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiMcpServerItem[]>('mcp.list', { agentId, project: projectPath }),
   },
 
   config: {

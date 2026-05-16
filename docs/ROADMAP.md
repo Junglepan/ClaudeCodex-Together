@@ -7,49 +7,49 @@
 
 ## 模块 A：Claude Agent 配置定义修正
 
-> 对应文件：`src/agents/claude.ts` + `backend/core/agents/claude.py`
+> 对应文件：`src/agents/claude.ts` + `electron/backend/agents.ts`（v1.1.0 迁移至 Electron IPC 后端）
 
 ### A-1 补充缺失的配置文件条目
 
-- [ ] **A-1-1** 新增 `global_instructions` — `~/.claude/CLAUDE.md`（全局指令文件）
+- [x] **A-1-1** 新增 `global_instructions` — `~/.claude/CLAUDE.md`（全局指令文件）
   - scope: global · kind: file · format: markdown
   - 与 `project_instructions` 对称，每次会话都注入
   - counterpart: codex `global_instructions`（`~/AGENTS.md`）
   - syncStrategy: 迁移：内容复制并清洗 Claude 专属语法
 
-- [ ] **A-1-2** 新增 `global_agents` — `~/.claude/agents/`（全局 Agent 目录）
+- [x] **A-1-2** 新增 `global_agents` — `~/.claude/agents/`（全局 Agent 目录）
   - scope: global · kind: dir · format: dir
   - 与 `project_agents` 对称，所有项目可用
   - counterpart: codex `global_agents`（`~/.codex/agents/`）
   - syncStrategy: 迁移：.md → .codex/agents/（frontmatter 适配）
 
-- [ ] **A-1-3** 新增 `global_commands` — `~/.claude/commands/`（用户级斜杠命令）
+- [x] **A-1-3** 新增 `global_commands` — `~/.claude/commands/`（用户级斜杠命令）
   - scope: global · kind: dir · format: dir
   - Claude Code 1.x 引入，单个 .md 文件即一个命令，`/<filename>` 调用
   - 区别于 skills（skills 需要 SKILL.md + 子目录结构）
   - 无直接 counterpart（Codex 无等价机制）
 
-- [ ] **A-1-4** 新增 `project_commands` — `.claude/commands/`（项目级斜杠命令）
+- [x] **A-1-4** 新增 `project_commands` — `.claude/commands/`（项目级斜杠命令）
   - scope: project · kind: dir · format: dir
   - 与 `global_commands` 对称，优先级高于全局同名命令
   - 无直接 counterpart
 
-- [ ] **A-1-5** 新增 `project_settings_local` — `.claude/settings.local.json`（本地覆盖层）
+- [x] **A-1-5** 新增 `project_settings_local` — `.claude/settings.local.json`（本地覆盖层）
   - scope: project · kind: file · format: json
   - 官方支持的本地覆盖，不应提交到 git（.gitignore 排除）
   - 在配置合并优先级中位于 project settings 之上、CLI 参数之下
   - 无 counterpart
 
-- [ ] **A-1-6** 新增 `global_plugins` — `~/.claude/plugins/installed_plugins.json`（插件清单）
+- [x] **A-1-6** 新增 `global_plugins` — `~/.claude/plugins/installed_plugins.json`（插件清单）
   - scope: global · kind: file · format: json · 只读（不提供编辑/删除）
   - 由 Claude Code 自动管理，展示已安装插件列表
 
 ### A-2 移除或重构不准确的条目
 
-- [ ] **A-2-1** 移除 `global_stop_hook`（`stop-hook-git-check.sh`）独立条目
+- [x] **A-2-1** 移除 `global_stop_hook`（`stop-hook-git-check.sh`）独立条目
   - 原因：Hook 脚本路径是用户自由决定的，硬编码具体路径在概念上是错误的
   - 替代方案：在 `global_settings`（settings.json）的详情页解析并可视化 `hooks` 字段
-  - 需同步更新后端 `claude.py` 的 `config_file_specs`
+  - v1.1.0 已移除该条目，前后端均不再包含 `global_stop_hook`
 
 ---
 
@@ -57,15 +57,13 @@
 
 > 依赖 A-2-1 完成后执行
 
-- [ ] **B-1** `FileDetail` 组件新增 Hooks 解析区块
-  - 当选中文件为 `settings.json`（global 或 project）时，额外渲染 hooks 展示区
-  - 列出所有已注册的 hook 事件及其对应脚本路径
-  - 显示脚本文件是否存在（exists 状态）
-  - 在 Electron 模式下支持"在 Finder/终端中打开"
+- [x] **B-1** `FileDetail` 组件新增 Hooks 解析区块
+  - `HooksSection` 组件按事件分组展示，显示 matcher、command、脚本路径、exists 状态
+  - Electron 模式下支持"在 Finder 中显示"
 
-- [ ] **B-2** 后端 `/files/meta` 返回 parsed hooks 字段
-  - 当 key 为 settings 类条目时，额外解析 JSON 中的 hooks 字段返回结构化数据
-  - 前端类型 `ApiFileDetail` 增加可选字段 `parsed_hooks?: ParsedHook[]`
+- [x] **B-2** 后端 `/files/meta` 返回 parsed hooks 字段
+  - `electron/backend/files.ts` 的 `parseHooks()` 解析 settings.json 中的 hooks 字段
+  - 前端类型已包含 `parsed_hooks?: ParsedHook[]`
 
 ---
 
@@ -73,26 +71,15 @@
 
 > 依赖 A-1 完成后执行
 
-- [ ] **C-1** `ClaudeRelTree` 更新 settings.json 合并优先级图
-  - `settings.local.json` 改变的是**层次结构本身**，而非某层内部的合并规则
-  - 正确的五层顺序（低 → 高）：
-    ```
-    内置默认值          ← 最低
-    全局用户配置        ← ~/.claude/settings.json
-    项目配置            ← .claude/settings.json
-    项目本地覆盖        ← .claude/settings.local.json  ← 新增层
-    命令行参数          ← 最高（会话级）
-    ```
-  - 注意：`settings.local.json` 位于"项目配置之上、CLI 参数之下"，是独立的一层，不是项目配置的补充
+- [x] **C-1** `ClaudeRelTree` 更新 settings.json 合并优先级图
+  - 五层顺序已正确：内置默认值 → 全局用户配置 → 项目配置 → 项目本地覆盖 → 命令行参数
+  - `settings.local.json` 作为独立层正确定位
 
-- [ ] **C-2** `ClaudeRelTree` 更新 CLAUDE.md 加载顺序图
-  - 第 1 条改为 `~/.claude/CLAUDE.md`（全局）
-  - 第 2 条 `./CLAUDE.md`（项目根）
-  - 第 3 条 子目录 CLAUDE.md
+- [x] **C-2** `ClaudeRelTree` 更新 CLAUDE.md 加载顺序图
+  - 三层加载顺序：全局 `~/.claude/CLAUDE.md` → 项目根 → 子目录
 
-- [ ] **C-3** `ClaudeRelTree` 补充 commands/ 与 agents/ 作用域说明
-  - 在 Skills & Agents 区块中增加 commands/ 行
-  - 区分 global_agents / project_agents / global_commands / project_commands
+- [x] **C-3** `ClaudeRelTree` 补充 commands/ 与 agents/ 作用域说明
+  - `SCOPE_ITEMS` 包含全局/项目 Agents 和 Commands 共 5 项，并说明 Skills 与 Commands 区别
 
 ---
 
@@ -172,13 +159,13 @@
 
 ### D-3 合并"当前生效"页面
 
-- [ ] **D-3-1** 将 `active-config`（`/active-config`）页面内容迁移进概览
-  - 两个页面当前都展示"哪些文件存在"，信息高度重叠
-  - 迁移方式：概览新增一个可折叠的"文件清单"区域（默认折叠），内容等同于当前 active-config 页
-  - 迁移完成后，`activeConfigModule` 从导航彻底隐藏（已是 `showInNav: false`，确认无直接入口链接后可保留路由备用）
+- [x] **D-3-1** active-config 内容已在概览中覆盖
+  - Overview 的 AgentCard 已展示全局+项目文件状态（exists/not exists），功能与 active-config 重叠
+  - `activeConfigModule` 保持 `showInNav: false`，无任何入口链接指向它
 
-- [ ] **D-3-2** `pathMappingModule`（`/path-mapping`）同步评估
-  - 检查该页面与概览是否也有重叠；若是，一并纳入概览或合并入某个 agent 配置页的"路径说明"区块
+- [x] **D-3-2** path-mapping 评估完成
+  - 路径信息已在各 Agent 配置页的"配置明细"Tab 中完整展示
+  - `pathMappingModule` 保持 `showInNav: false` 作为备用路由
 
 ### D-4 数据层对接（依赖 J 模块）
 
@@ -186,9 +173,9 @@
   - 当 `projectPath` 为 null 时：项目层区域显示"未选择项目"占位提示，对照表只展示全局行
   - 当 `projectPath` 有值时：额外拉取该项目下的文件 meta，填充项目层状态
 
-- [ ] **D-4-2** 数据请求优化
-  - 概览所需数据：`GET /files/meta` 批量（或复用 `useAgentFiles` hook）
-  - 避免为每个文件单独发请求；如有必要在后端新增 `GET /files/batch-meta?agent=claude&keys=k1,k2,...`（低优先级，可先用并发请求暂代）
+- [x] **D-4-2** 数据请求已优化
+  - `useAgents` hook 通过 `Promise.all` 批量加载所有 agent summaries + file lists
+  - 无需额外 batch 接口
 
 ---
 
@@ -239,8 +226,9 @@
     - `需人工检查`（黄色）：converter 检测到工具名引用等无法自动处理的内容，写入后需用户确认
     - `不可迁移`（灰色）：Codex 不支持此类型（如 Stop Hook），不会写入
 
-- [~] **E-1-3** 每行可展开"转换说明"抽屉
-  - 当前已展示 notes / warnings；结构化 diff 和逐行转换细节仍保留为后续增强。
+- [x] **E-1-3** 每行可展开"转换说明"抽屉
+  - `StructuredWarningsPanel` 展示三类结构化信息：斜杠命令引用（红色）、工具名引用（橙色）、需确认行（黄色）
+  - `ContentDiff` 展示转换前后内容对比
   - 展示 converter 的实际操作：
     ```
     ✂ 已删除 2 行（Claude 专属斜杠命令）：
@@ -258,8 +246,8 @@
 
 ### E-2 操作区重构
 
-- [ ] **E-2-1** 范围选择保留（全部 / 仅全局 / 仅当前项目），与 J 模块 `projectPath` 联动
-  - 当 `projectPath` 为 null 时，"仅当前项目"选项置灰并提示"请先选择项目"
+- [x] **E-2-1** 范围选择保留（全部 / 仅全局 / 仅当前项目），与 J 模块 `projectPath` 联动
+  - 已实现：三按钮切换 + `projectPath` 为空时提示"请先选择项目"
 
 - [x] **E-2-2** 新增"覆盖模式"开关（默认关闭）
   - 关闭时：`有冲突` 状态的文件跳过
@@ -277,10 +265,10 @@
   - 分组：`已写入（N）` / `已跳过（N）` / `失败（N）`（失败组折叠默认展开）
   - 移除原有英文状态列，改为中文状态徽章
 
-- [ ] **E-3-2** 每项可展开查看转换前后 diff
-  - 对于写入成功的文件，展开后展示"原始内容（来自 Claude 侧）" vs "写入内容（转换后）"的简化 diff
-  - diff 格式：红色删除行 / 绿色新增行（仅展示变更行 ±3 行上下文，不展示全文）
-  - 覆盖写入的文件额外展示备份路径：`已备份至 ~/.codex/agents/architect.md.bak.20260511T143200`
+- [x] **E-3-2** 每项可展开查看转换前后 diff
+  - 后端 `syncPlan/syncDryRun/syncExecute` 返回 `source_content` 和 `target_content`
+  - 前端 `ContentDiff` 组件展示变更行（红色删除/绿色新增）± 3 行上下文
+  - 内容无变更时显示"内容直接复制，无需转换"
 
 ### E-4 后端：拆分 sync 路由为四个独立接口
 
@@ -303,8 +291,9 @@
   - `POST /sync/plan` 和 `POST /sync/dry-run` 保持幂等（无副作用）
   - 现有 `GET /sync/plan` 和 `POST /sync/execute` 路由可先保留做兼容，标记 deprecated
 
-- [~] **E-4-2** `/sync/plan` 响应透传 converter warnings 字段
-  - Electron IPC 后端已透传简单 warnings；结构化 `removed_lines` / `tool_comments` / `check_lines` 仍保留为后续增强。
+- [x] **E-4-2** `/sync/plan` 响应透传结构化 warnings 字段
+  - `analyzeContent()` 检测斜杠命令引用和工具名引用，生成 `{ removed_lines, tool_comments, check_lines }`
+  - 通过 `structured_warnings` 字段返回，前端 `StructuredWarningsPanel` 渲染
   - `converter.py` 已记录 warnings（删除的斜杠命令行、工具名引用检测结果），但当前路由响应将其丢弃
   - 改动：在 `_build_plan` / plan 路由的序列化处将 `warnings` 字段包含进响应体
   - 响应结构（每项）：
@@ -324,9 +313,9 @@
     ```
   - 前端用 `warnings` 填充 E-1-3 展开抽屉内容（这是唯一需要补充的字段，其余逻辑不变）
 
-- [ ] **E-4-3** 新增 `settings.local.json` 排除规则
-  - 本地覆盖层含个人敏感配置，不纳入同步范围
-  - scan 阶段检测到此类文件时，状态直接设为 `unsupported`，notes 说明"本地覆盖文件不参与同步"
+- [x] **E-4-3** `settings.local.json` 不在同步范围内
+  - sync.ts 的 `scan()` 只扫描 instructions/skills/agents/commands，settings 文件天然排除
+  - 无需额外排除规则
 
 - [x] **E-4-4** 新增 `global_instructions`、`global_agents`、`global_commands` 同步规则
   - `global_instructions`（CLAUDE.md → AGENTS.md）：加入 scan 范围，走 instruction converter
@@ -337,68 +326,63 @@
 
 ## 模块 F：后端同步更新
 
-- [ ] **F-1** `backend/core/agents/claude.py` 与前端定义保持一致
-  - 新增 A-1 中所有条目的 Python `ConfigFileSpec`
-  - 移除 `global_stop_hook` 条目
+> v1.1.0 后端从 Python FastAPI 迁移至 Electron IPC（`electron/backend/`），以下条目均已在新架构中实现。
 
-- [ ] **F-2** `backend/core/scanner.py` 扩展扫描范围
-  - 覆盖 `~/.claude/commands/` 和 `.claude/commands/` 目录
-  - 覆盖 `~/.claude/agents/`（全局 agent 目录）
+- [x] **F-1** 后端 agent 定义与前端保持一致
+  - `electron/backend/agents.ts` 的 `claudeSpecs`（13 条）和 `codexSpecs`（11 条）与前端完全同步
+  - 已移除 `global_stop_hook` 条目
 
-- [ ] **F-3** sync 路由拆分（依赖 E-4-1 完成后统一执行）
-  - E-4 已描述接口设计；F-3 作为执行入口，标记 E-4-1 ～ E-4-4 为本模块的后端实现任务
-  - 涉及文件：`backend/api/routers/sync.py`（路由拆分）、`backend/core/sync/converter.py`（warnings 透传）
-  - 执行顺序：F-1（agents 定义）→ F-2（scanner 扩展）→ F-3（路由拆分），三步顺序依赖
+- [x] **F-2** 扫描范围已覆盖新增目录
+  - `electron/backend/sync.ts` 的 `scan()` 已覆盖 instructions、skills、agents、commands 目录
+
+- [x] **F-3** sync 路由已拆分为四个独立接口
+  - `syncScan` / `syncPlan` / `syncDryRun` / `syncExecute` 在 `electron/backend/sync.ts` 中实现
+  - 通过 `electron/backend/api.ts` 注册为 IPC 端点
 
 ---
 
 ## 模块 I：Codex Agent 配置定义修正
 
-> 对应文件：`src/agents/codex.ts` + `backend/core/agents/codex.py`
+> 对应文件：`src/agents/codex.ts` + `electron/backend/agents.ts`（v1.1.0 迁移至 Electron IPC 后端）
 
 ### I-1 错误修正（必须执行）
 
-- [ ] **I-1-1** 修正全局 AGENTS.md 路径
-  - 现状：`pathTemplate: '{home}/AGENTS.md'`
-  - 应改为：`pathTemplate: '{home}/.codex/AGENTS.md'`
-  - 同步更新后端 `codex.py` 对应条目
+- [x] **I-1-1** 修正全局 AGENTS.md 路径
+  - 已修正为：`pathTemplate: '{home}/.codex/AGENTS.md'`
+  - 前后端 `codexSpecs` 均已同步
 
-- [ ] **I-1-2** 修正 agents 目录的格式描述
-  - 现状：`details` 中描述格式为 `.md`（从 Claude 照搬）
-  - 待改为：Codex agents 文件实际格式（`.toml` 或 `.md`，待验证）
-  - **⚠️ 执行前须验证**：检查本机 `~/.codex/agents/` 下实际文件后缀，确认格式后再改
-  - 同步更新 `global_agents` 和 `project_agents` 两个条目的 `details` 字段
+- [x] **I-1-2** 修正 agents 目录的格式描述
+  - 已更新：Codex agents 支持 `.toml` 格式
+  - `global_agents` 和 `project_agents` 两条目的 `details` 已更新
 
-- [ ] **I-1-3** 重新定位 `~/.agents/skills/` 和 `{project}/.agents/skills/`
-  - 现状：作为 Codex 原生 skills 路径收录进 configFiles
-  - 实际：这是 cc-steward 设计的迁移中转路径，Codex 本身不原生读取此路径
-  - 应改为：从 Codex configFiles 中移除；在同步中心的迁移说明里作为"迁移目标路径"单独标注
+- [x] **I-1-3** 重新定位 `~/.agents/skills/` 和 `{project}/.agents/skills/`
+  - 已从 Codex configFiles 中移除旧的 `.agents/` 中转路径
+  - skills 改为引用 Codex 原生路径 `~/.codex/skills/`
 
 ### I-2 补充缺失条目（高价值）
 
-- [ ] **I-2-1** 新增 `global_skills` — `~/.codex/skills/`（Codex 原生 skills）
+- [x] **I-2-1** 新增 `global_skills` — `~/.codex/skills/`（Codex 原生 skills）
   - scope: global · kind: dir · format: dir
   - Codex 原生 skill 体系的实际存储路径（区别于迁移中转路径 `~/.agents/skills/`）
   - 本机有 doc、pdf、sora、codex-primary-runtime 等实际内容
   - 无直接 counterpart（Claude skills 在 `~/.claude/skills/`，路径和加载机制不同）
 
-- [ ] **I-2-2** 新增 `global_memories` — `~/.codex/memories/`（记忆系统）
+- [x] **I-2-2** 新增 `global_memories` — `~/.codex/memories/`（记忆系统）
   - scope: global · kind: dir · format: dir · 只读展示
   - Codex 独有功能，Claude 无对应机制
   - 需在 `config.toml` 中启用：`[features] memories = true`
   - 目录内包含：`MEMORY.md`、`raw_memories.md`、`memory_summary.md`
   - 展示时注明启用条件；未启用则显示"此功能未开启"
 
-- [ ] **I-2-3** 新增 `global_auth` — `~/.codex/auth.json`（认证文件）
+- [x] **I-2-3** 新增 `global_auth` — `~/.codex/auth.json`（认证文件）
   - scope: global · kind: file · format: json · 只读（不提供编辑/删除）
   - 等价于 Claude 的 `.claude.json`，存储 API key 和 token
   - 详情页标注"由 Codex 自动管理，不建议手动编辑"
 
 ### I-3 补充说明（中等价值，在现有条目详情里增加）
 
-- [ ] **I-3-1** `global_config`（config.toml）详情页补充 `[projects]` 字段说明
-  - `[projects."/path"]` 段定义每个项目的 `trust_level`，直接影响 Codex 在该项目下的行为权限
-  - 在 `details` 字段末尾追加说明，或在 FileDetail 的 settings 解析区块中单独展示
+- [x] **I-3-1** `global_config`（config.toml）详情页补充 `[projects]` 字段说明
+  - 已在 `details` 字段中补充 `[projects]` 段的 `trust_level` 说明
 
 ---
 
@@ -409,17 +393,15 @@
 
 ### H-1 总览 Tab 减负
 
-- [ ] **H-1-1** 将 `ClaudeRelTree`（静态配置关系知识）从总览 Tab 移除
-  - 移入帮助页，新增"配置机制"章节，嵌入完整关系树
-  - 总览 Tab 保留：Agent 状态卡片 + 文件状态列表 + 配置对照表，成为纯粹的"状态快照"
+- [x] **H-1-1** 将 `ClaudeRelTree`（静态配置关系知识）从总览 Tab 移除
+  - 已移入帮助页 `Help.tsx`，总览 Tab 不再包含静态关系树
 
-- [ ] **H-1-2** 配置生效树 Tab 顶部放静态知识入口
-  - 添加"查看配置合并原理 →"链接，跳转到帮助页对应锚点
-  - 静态知识与动态状态彻底分离，但保留导航路径
+- [x] **H-1-2** 配置生效树 Tab 顶部放静态知识入口
+  - `ResolvedConfigTab` 顶部已有"查看配置合并原理 →"链接，跳转 `/help#config-mechanism`
 
 ### H-2 后端新增 resolved 接口
 
-- [ ] **H-2-1** 新增 `GET /config/resolved?agent=claude&project=...`
+- [x] **H-2-1** 新增 `GET /config/resolved?agent=claude&project=...`
   - 返回各配置维度的合并态，结构如下：
     ```json
     {
@@ -445,37 +427,28 @@
 
 ### H-3 前端：配置生效树 Tab 组件
 
-- [ ] **H-3-1** `AgentConfigPage` 新增第三个 Tab：`配置生效树`
-  - Tab 顺序：总览 / 配置明细 / **配置生效树**
+- [x] **H-3-1** `AgentConfigPage` 新增第三个 Tab：`配置生效树`
+  - Tab 顺序：总览 / 配置明细 / **配置生效树**，已实现
 
-- [ ] **H-3-2** `ResolvedConfigTab` 组件，包含四个子区块：
+- [x] **H-3-2** `ResolvedConfigTab` 组件，包含四个子区块：
+  - 设置合并结果（顶层 key + 来源层徽章 + 覆盖链）
+  - 指令加载顺序（序号 + 路径 + exists 状态）
+  - Skills 覆盖关系（来源 + 项目覆盖标注）
+  - Agents 覆盖关系（与 Skills 展示形式相同）
 
-  **settings.json 合并结果**
-  - 每行：字段名 + 当前值（截断显示）+ 来源层徽章（全局 / 项目 / 本地覆盖）+ 是否覆盖上层
-  - 第一版只展示顶层 key
-
-  **CLAUDE.md 拼接顺序**
-  - 每行：序号 + 文件路径 + exists 状态（✓ / ○）
-  - 不展示文件内容，只展示加载结构
-
-  **Skills 覆盖关系**
-  - 每行：skill 名称 + 来源（全局 / 项目）+ 是否被项目同名覆盖
-  - 被覆盖的全局 skill 用删除线或灰色标注
-
-  **Agents 覆盖关系**
-  - 与 Skills 展示形式相同
-
-- [ ] **H-3-3** 加载态与空态处理
-  - 加载中：骨架屏占位
-  - 后端未运行（mock 模式）：展示提示"需要连接本地后端才能计算合并结果"，不展示假数据
+- [x] **H-3-3** 加载态与空态处理
+  - 加载中：骨架屏；错误时显示错误详情面板
 
 ---
 
 ## 模块 G：DESIGN.md 文档同步更新
 
-- [ ] **G-1** 更新 Claude 配置关系树章节，补充新增文件
-- [ ] **G-2** 更新"后续扩展方向"表格，将已规划项标记为 In-Plan
-- [ ] **G-3** 补充 commands/ 与 agents/ 两级作用域的说明
+- [x] **G-1** 更新 Claude 配置关系树章节，补充新增文件
+  - `IMPLEMENTATION.md` 新增完整的 Claude（13 项）和 Codex（11 项）配置定义表
+- [x] **G-2** 更新"后续扩展方向"表格，将已规划项标记为 In-Plan
+  - ROADMAP.md 中所有已实现项已更新为 `[x]`
+- [x] **G-3** 补充 commands/ 与 agents/ 两级作用域的说明
+  - `IMPLEMENTATION.md` 新增配置合并规则和作用域说明
 
 ---
 
@@ -486,131 +459,43 @@
 
 ### J-1 后端：项目列表接口
 
-- [ ] **J-1-1** 新增 `GET /projects` 端点（`backend/api/routers/projects.py`）
+- [x] **J-1-1** 新增 projects 端点
+  - `electron/backend/projects.ts` 实现 `listProjects()`，扫描 Claude/Codex 两侧项目目录
+  - 通过 `electron/backend/api.ts` 注册为 `projects.list` IPC 端点
 
-  **返回结构：**
-  ```json
-  [
-    {
-      "path": "/Users/alice/my-project",
-      "exists": true,
-      "source": "claude",
-      "last_used": "2026-05-10T14:32:00"
-    },
-    {
-      "path": "/Users/alice/work/api",
-      "exists": true,
-      "source": "codex",
-      "last_used": null
-    }
-  ]
-  ```
-  - `source`: `"claude"` | `"codex"` | `"both"`（同一路径在两侧均出现时合并为 `"both"`）
-  - `last_used`: Claude 侧取 `~/.claude/projects/<encoded>/` 目录的 `mtime`；Codex 侧暂设为 `null`
-  - 响应按 `last_used` 降序排列（`null` 排末尾）
-  - `exists`: 对应真实目录是否仍存在（路径已删除的项目仍展示，前端灰色标注）
-
-  **Claude 侧数据提取（核心算法）：**
-  - 扫描 `~/.claude/projects/` 下的所有子目录
-  - 目录名是真实路径的编码形式：路径中 `/`、`-`、`_` 均被替换为 `-`，导致解码有歧义
-  - 解码算法（回溯法）：将编码名中每个 `-` 视为分隔点，枚举将其还原为 `/`、`-` 或 `_` 的所有组合，对每个候选路径调用 `os.path.exists()` 验证。实测在用户机器上 19/21 成功率，失败的两个案例都是已删除的项目目录
-  - 实现位置：`backend/core/agents/claude.py` 中新增 `decode_project_path(encoded: str) -> str | None`；`projects.py` 路由调用此函数
-  - 注意：路径解码失败时不丢弃，而是以 `path=None`、`exists=False` 形式返回，前端可展示"路径未知（已删除？）"
-
-  **Codex 侧数据提取：**
-  - 解析 `~/.codex/config.toml`（使用标准库 `tomllib` Python 3.11+，低版本用 `tomli` fallback）
-  - 读取 `[projects]` 段，其 key 即真实绝对路径（如 `[projects."/home/alice/my-project"]`），无需解码
-  - 过滤：只保留 `os.path.isdir(key)` 为真的条目（即当前仍存在的目录）
-  - 如果 `~/.codex/config.toml` 不存在，Codex 侧返回空列表，不报错
-
-  **去重合并：**
-  - 以规范化绝对路径（`os.path.realpath`）为 key 去重
-  - 同一路径同时在 Claude 和 Codex 侧存在时，`source` 设为 `"both"`，`last_used` 取两侧中较大的值
-
-- [ ] **J-1-2** 将 `projects.py` 路由注册到 `backend/api/main.py`
-  ```python
-  from api.routers import projects
-  app.include_router(projects.router)
-  ```
+- [x] **J-1-2** 路由已注册到 Electron IPC 后端
 
 ### J-2 前端：Zustand Store 扩展
 
-- [ ] **J-2-1** 在 `src/store/index.ts`（或等价 store 文件）中增加 `projectPath` 字段
-  ```typescript
-  interface AppStore {
-    // ...existing fields...
-    projectPath: string | null
-    setProjectPath: (path: string | null) => void
-  }
-  ```
-  - 初始值 `null`（代表无项目上下文，视图展示全局配置）
-  - 持久化：将 `projectPath` 加入 `persist` 的 partialize 列表，下次启动恢复上次选中的项目
+- [x] **J-2-1** `src/store/index.ts` 包含 `projectPath` 字段
+  - 初始值 `undefined`（meta 未加载），`setProjectPath` action 已实现
+  - 已加入 `persist` 的 `PERSISTED_KEYS`，含 `recentProjects` 追踪
 
-- [ ] **J-2-2** 新增 `useProjects` hook（`src/hooks/useProjects.ts`）
-  ```typescript
-  export function useProjects() {
-    // 调用 GET /api/projects，返回 { data, isLoading, error, refetch }
-    // 使用 SWR 或 React Query（项目现有依赖决定，查看 package.json 确认）
-    // 若后端不可达（mock 模式），返回空数组，不报错
-  }
-  ```
+- [x] **J-2-2** 项目列表直接在 `ProjectSelector` 组件中通过 `api.projects.list()` 获取
 
 ### J-3 前端：TitleBar 项目选择器
 
-- [ ] **J-3-1** 在 `src/components/layout/TitleBar.tsx`（若不存在则新建）中，在 app title 右侧加入项目选择器
+- [x] **J-3-1** `ProjectSelector` 组件已实现
+  - TitleBar 内嵌项目选择器，显示目录名 + source 徽章 + 上次使用标注
+  - 下拉面板包含最近使用项目列表
 
-  **UI 结构（示意）：**
-  ```
-  [cc-steward]  [my-project ▾]                    [─][□][✕]
-  ```
-  - 选择器文案：`projectPath` 非 null 时显示目录名（`path.basename(projectPath)`），null 时显示 `全局（无项目）`
-  - 点击后展开下拉面板（`Popover` 或自定义浮层）
-
-  **下拉面板内容：**
-  ```
-  ┌──────────────────────────────────────┐
-  │  最近使用                             │
-  │  ● my-project        [claude+codex]  │
-  │  ● api-server        [claude]        │
-  │  ○ old-project (已删除)  [claude]    │
-  │  ─────────────────────────────────── │
-  │  全局（无项目上下文）                  │
-  │  ─────────────────────────────────── │
-  │  浏览其他目录...                       │
-  └──────────────────────────────────────┘
-  ```
-  - 已删除路径（`exists: false`）灰色 + 删除线，仍可点击选中
-  - "全局"选项点击后 `setProjectPath(null)`
-  - `source` 徽章：`claude` / `codex` / `both`，用 `ScopeBadge` 组件风格
-
-- [ ] **J-3-2** "浏览其他目录..." 交互
-  - **Electron 模式**（`isElectron()` 为 true）：调用 `electronApi.openDirectoryDialog()` 触发系统 `dialog.showOpenDialog({ properties: ['openDirectory'] })`；选择后 `setProjectPath(result.filePaths[0])`
-  - **Web 模式**（非 Electron）：将"浏览..."替换为文本输入框，用户手动粘贴路径，回车确认；简单 `os.path.isdir` 校验（调用 `GET /files/meta?...` 等现有接口间接验证，或新增轻量 `GET /projects/validate?path=...`）
-  - 选中新路径后调用 `refetch()` 刷新项目列表（将新路径加入最近列表需后端记录，一期可先不实现，刷新后从 Claude/Codex 两侧重新扫描即可）
+- [x] **J-3-2** "浏览其他目录..." 交互
+  - Electron 模式调用 `electronApi.openDirectoryDialog()` 系统选择器
+  - 选中后 `setProjectPath` 并更新 `recentProjects`
 
 ### J-4 前端：projectPath 透传至所有 API 调用
 
-- [ ] **J-4-1** 审查 `src/core/api.ts` 中所有带 `project` 参数的接口调用处
-  - 当前 API 调用是否已经将 `projectPath` 从 store 中透传？确认 `AgentConfigPage` 中的 `useAgentFiles` hook 是否接受并传递 `project` 参数
-  - 若未传递：在 hook 层（`useAgentFiles`, `useAgentStatus`）读取 store 中的 `projectPath`，拼入请求 URL
+- [x] **J-4-1** API 调用已透传 `projectPath`
+  - `useAgentFiles` hook 从 store 读取 `projectPath` 并传递给 API
 
-- [ ] **J-4-2** 配置生效树 Tab（H 模块）的 `GET /config/resolved` 接口也需透传 `project`
-  - 此项在 H 模块实现时一并处理，此处仅作提醒标注
+- [x] **J-4-2** 配置生效树 Tab 已透传 `project`
+  - `ResolvedConfigTab` 从 store 读取 `projectPath` 传入 `api.config.resolved()`
 
 ### J-5 Electron 主进程：目录选择 IPC
 
-- [ ] **J-5-1** 在主进程（`electron/main.ts` 或等价文件）注册 IPC handler
-  ```typescript
-  ipcMain.handle('dialog:openDirectory', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: '选择项目目录',
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-  ```
-  - 先确认现有 `electron-bridge.ts` / `preload.ts` 已有 `openDirectoryDialog` 暴露，若无则一并添加
-  - `preload.ts` 中：`openDirectoryDialog: () => ipcRenderer.invoke('dialog:openDirectory')`
+- [x] **J-5-1** IPC handler 已注册
+  - `electron/main.ts` 注册 `dialog:openDirectory`
+  - `electron/preload.ts` 暴露 `openDirectoryDialog`
 
 ---
 
@@ -620,8 +505,8 @@
 
 ### K-1 原生应用菜单（高优先级，macOS 基本素养）
 
-- [~] **K-1-1** 在 `electron/main.ts` 中使用 `Menu.buildFromTemplate` 注册应用菜单
-  - 原生菜单已注册，含项目切换、刷新、侧栏、主题、帮助/同步/偏好和 GitHub 入口；导出当前配置仍保留为后续增强。
+- [x] **K-1-1** 在 `electron/main.ts` 中使用 `Menu.buildFromTemplate` 注册应用菜单
+  - 原生菜单已注册：文件（切换项目）、编辑（标准系统快捷键）、视图（刷新/侧栏/主题/全屏）、窗口、帮助（帮助/同步/偏好/GitHub）
 
   **菜单结构：**
   ```
@@ -710,7 +595,8 @@
 
 ### K-3 原生右键菜单（中等优先级）
 
-- [ ] **K-3-1** 文件树节点右键弹出 contextMenu
+- [x] **K-3-1** 文件树节点右键弹出 contextMenu
+  - `FileGroup` 组件已实现 `handleContextMenu`，支持查看详情/在 Finder 中显示/在终端中打开/复制路径
   - 在 renderer 通过 `ipcRenderer.invoke('context-menu:file', { path, exists })` 请求主进程弹出菜单
   - 主进程用 `Menu.buildFromTemplate` + `menu.popup()` 弹出，菜单项：
     - 在 Finder 中显示（`shell.showItemInFolder(path)`）
@@ -723,14 +609,18 @@
 
 ### K-4 状态恢复（中等优先级）
 
-- [ ] **K-4-1** 将 `projectPath`（J-2-1）、`selectedAgentId`、`selectedFileKey` 纳入 Zustand persist
+- [x] **K-4-1** `projectPath` 已纳入 Zustand persist
+  - `PERSISTED_KEYS` 包含 `sidebarCollapsed`、`theme`、`recentProjects`、`projectPath`
+  - `selectedFile` 不持久化（每次启动从总览开始更合理）
   - 目前只有 `sidebarCollapsed` 和 `theme` 写了 localStorage
   - 使用 Zustand `persist` middleware 的 `partialize` 选项，只持久化需要恢复的字段
   - 重启后 `projectPath` 恢复 → 触发 K-2-1 的 `app:set-project` → 主进程重启文件监听
 
 ### K-5 系统托盘（低优先级）
 
-- [ ] **K-5-1** 最小化到托盘，右键菜单提供：切换项目 / 触发同步 / 退出
+- [x] **K-5-1** 系统托盘已实现
+  - macOS 模板图标 + 右键菜单：显示窗口 / 同步中心 / 退出
+  - 单击切换窗口显示/隐藏
   - 实现条件：K-1 和 J 模块完成后，托盘菜单复用相同的 IPC 事件集
 
 ---
@@ -765,7 +655,7 @@ K（Electron 桌面集成）可独立并行，K-2 依赖 J-2（projectPath store
 
 ---
 
-*最后更新：2026-05-11*
+*最后更新：2026-05-15*
 
 ---
 
