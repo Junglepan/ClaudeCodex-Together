@@ -46,12 +46,12 @@ test('listSessions discovers Claude and Codex sessions with project metadata', a
   const home = seedSessions()
 
   const sessions = await listSessions({ scope: 'all' }, { homeDir: home })
-  const projectSessions = await listSessions({ scope: 'current-project', projectPath: '/tmp/proj-a' }, { homeDir: home })
+  const projectSessions = await listSessions({ scope: 'current-project', projectPath: path.normalize('/tmp/proj-a') }, { homeDir: home })
 
   assert.equal(sessions.length, 3)
   assert.deepEqual(sessions.map((session) => session.agent).sort(), ['claude', 'claude', 'codex'])
   assert.equal(projectSessions.length, 2)
-  assert.ok(projectSessions.every((session) => session.projectPath === '/tmp/proj-a'))
+  assert.ok(projectSessions.every((session) => session.projectPath === path.normalize('/tmp/proj-a')))
   assert.ok(sessions.every((session) => session.id.length > 10))
   assert.ok(sessions.every((session) => session.sizeBytes > 0))
 })
@@ -83,7 +83,7 @@ test('overview aggregates project and user metrics and watch paths are scoped', 
 
   const projects = await listSessionProjects({ scope: 'all' }, { homeDir: home })
   const user = await getSessionsOverview({ scope: 'user' }, { homeDir: home })
-  const project = await getSessionsOverview({ scope: 'project', projectPath: '/tmp/proj-a' }, { homeDir: home })
+  const project = await getSessionsOverview({ scope: 'project', projectPath: path.normalize('/tmp/proj-a') }, { homeDir: home })
   const watchPaths = sessionWatchPaths({ homeDir: home })
 
   assert.equal(projects.length, 2)
