@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ApiProjectSessionOverview,
   ApiSessionAgent,
@@ -10,103 +10,156 @@ import type {
 } from '@/core/api'
 import { api } from '@/core/api'
 import { useAppStore } from '@/store'
-import { OverviewStats } from './SessionAnalytics'
-import { ProjectSessionsOverview } from './ProjectSessionsOverview'
-import { SessionDetail } from './SessionDetail'
-import { SessionList } from './SessionList'
-import { SessionSearch } from './SessionSearch'
+import { OverviewDashboard } from './OverviewDashboard'
+import { ProjectSidebar } from './ProjectSidebar'
+import { ConversationViewer } from './ConversationViewer'
+import { SessionStatsPanel } from './SessionAnalytics'
+import { MessageNavigator } from './MessageNavigator'
 
-type ScopeFilter = 'current-project' | 'all'
+type MainView = 'overview' | 'conversation'
+type ResizePane = 'left' | 'right'
+
+const MIN_LEFT_WIDTH = 220
+const MAX_LEFT_WIDTH = 460
+const MIN_RIGHT_WIDTH = 180
+const MAX_RIGHT_WIDTH = 360
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
 
 export function SessionsPage({ agentId }: { agentId: ApiSessionAgent }) {
-  const { projectPath, pushToast } = useAppStore()
-  const [scope, setScope] = useState<ScopeFilter>('all')
-  const [selectedProject, setSelectedProject] = useState<string | null>(null)
-  const [sessions, setSessions] = useState<ApiSessionSummary[]>([])
-  const [projects, setProjects] = useState<ApiProjectSessionOverview[]>([])
+  const { pushToast } = useAppStore()
+
   const [overview, setOverview] = useState<ApiSessionOverview | null>(null)
-  const [selected, setSelected] = useState<ApiSessionSummary | null>(null)
+  const [projects, setProjects] = useState<ApiProjectSessionOverview[]>([])
+  const [sessions, setSessions] = useState<ApiSessionSummary[]>([])
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(null)
+  const [selectedSession, setSelectedSession] = useState<ApiSessionSummary | null>(null)
   const [detail, setDetail] = useState<ApiSessionDetail | null>(null)
+  const [loadingOverview, setLoadingOverview] = useState(false)
+  const [loadingSessions, setLoadingSessions] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<ApiSessionSearchHit[]>([])
   const [searching, setSearching] = useState(false)
   const [roleFilter, setRoleFilter] = useState<ApiSessionRole | 'all'>('all')
   const [showTools, setShowTools] = useState(true)
+  const [leftWidth, setLeftWidth] = useState(280)
+  const [rightWidth, setRightWidth] = useState(220)
 
-  const effectiveProject = selectedProject ?? (scope === 'current-project' ? projectPath : undefined)
-  const apiAgent: ApiSessionAgent = agentId
+  const mainView: MainView = selectedSession ? 'conversation' : 'overview'
+  const detailTokenRef = useRef(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  useEffect(() => {
+    setSelectedSession(null)
+    setDetail(null)
+    setSelectedProjectPath(null)
+    setSessions([])
+    setOverview(null)
+    setProjects([])
+    setQuery('')
+    setHits([])
+  }, [agentId])
+
+  // ── Data loading ──────────────────────────────────────────────────────────
+
+  const loadOverview = useCallback(async () => {
+    setLoadingOverview(true)
     try {
-      const listParams = { agent: apiAgent, projectPath: effectiveProject, scope }
-      const overviewParams = effectiveProject
-        ? { agent: apiAgent, projectPath: effectiveProject, scope: 'project' as const }
-        : { agent: apiAgent, scope: 'user' as const }
-      const [nextSessions, nextProjects, nextOverview] = await Promise.all([
-        api.sessions.list(listParams),
-        api.sessions.projects({ agent: apiAgent, scope: 'all' }),
-        api.sessions.overview(overviewParams),
+      const [nextOverview, nextProjects] = await Promise.all([
+        api.sessions.overview({ agent: agentId, scope: 'user' }),
+        api.sessions.projects({ agent: agentId, scope: 'all' }),
       ])
-      setSessions(nextSessions)
-      setProjects(nextProjects)
       setOverview(nextOverview)
-      setSelected((current) => current && nextSessions.some((session) => session.id === current.id) ? current : nextSessions[0] ?? null)
+      setProjects(nextProjects)
     } catch (error) {
-      pushToast({ kind: 'error', message: `会话加载失败：${error instanceof Error ? error.message : String(error)}` })
+      pushToast({ kind: 'error', message: `概览加载失败：${error instanceof Error ? error.message : String(error)}` })
     } finally {
-      setLoading(false)
+      setLoadingOverview(false)
     }
-  }, [apiAgent, effectiveProject, scope, pushToast])
+  }, [agentId, pushToast])
 
-  useEffect(() => { load() }, [load])
-
-  useEffect(() => {
-    if (!selected) {
-      setDetail(null)
-      return
+  const loadSessions = useCallback(async (projectPath: string | null) => {
+    setLoadingSessions(true)
+    try {
+      const params = projectPath
+        ? { agent: agentId, projectPath, scope: 'current-project' as const }
+        : { agent: agentId, scope: 'all' as const }
+      setSessions(await api.sessions.list(params))
+    } catch (error) {
+      pushToast({ kind: 'error', message: `会话列表加载失败：${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      setLoadingSessions(false)
     }
-    let cancelled = false
+  }, [agentId, pushToast])
+
+  const loadDetail = useCallback(async (session: ApiSessionSummary, pagination?: { offset?: number; limit?: number }) => {
+    const token = ++detailTokenRef.current
     setLoadingDetail(true)
-    api.sessions.detail(selected.agent, selected.id)
-      .then((nextDetail) => { if (!cancelled) setDetail(nextDetail) })
-      .catch((error) => pushToast({ kind: 'error', message: `读取会话失败：${error instanceof Error ? error.message : String(error)}` }))
-      .finally(() => { if (!cancelled) setLoadingDetail(false) })
-    return () => { cancelled = true }
-  }, [selected, pushToast])
+    try {
+      const nextDetail = await api.sessions.detail(session.agent, session.id, pagination ?? { limit: 50 })
+      if (token !== detailTokenRef.current) return
+      setDetail(nextDetail)
+    } catch (error) {
+      if (token !== detailTokenRef.current) return
+      pushToast({ kind: 'error', message: `读取会话失败：${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      if (token === detailTokenRef.current) setLoadingDetail(false)
+    }
+  }, [pushToast])
+
+  useEffect(() => { loadOverview() }, [loadOverview])
+  useEffect(() => { loadSessions(selectedProjectPath) }, [selectedProjectPath, loadSessions])
+
+  // ── Search ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!query.trim()) {
-      setHits([])
-      return
-    }
+    if (!query.trim()) { setHits([]); return }
     const timer = window.setTimeout(() => {
       setSearching(true)
-      api.sessions.search({ agent: apiAgent, projectPath: effectiveProject, scope, query })
+      api.sessions.search({ agent: agentId, scope: 'all', query })
         .then(setHits)
         .catch((error) => pushToast({ kind: 'error', message: `搜索失败：${error instanceof Error ? error.message : String(error)}` }))
         .finally(() => setSearching(false))
-    }, 250)
+    }, 300)
     return () => window.clearTimeout(timer)
-  }, [apiAgent, effectiveProject, scope, query, pushToast])
+  }, [agentId, query, pushToast])
 
-  const openHit = (hit: ApiSessionSearchHit) => {
-    setSelected(hit.session)
-    setTimeout(() => document.getElementById(`message-${hit.messageId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+  // ── Actions ───────────────────────────────────────────────────────────────
+
+  const selectProject = (path: string | null) => {
+    setSelectedProjectPath(path)
+    setSelectedSession(null)
+    setDetail(null)
   }
 
-  const deleteSelected = async () => {
-    if (!selected) return
-    const confirmed = window.confirm(`删除会话到 cc-steward 回收区？\n\n${selected.path}`)
-    if (!confirmed) return
+  const selectSession = (session: ApiSessionSummary) => {
+    setSelectedSession(session)
+    loadDetail(session)
+  }
+
+  const openSearchHit = (hit: ApiSessionSearchHit) => {
+    setSelectedSession(hit.session)
+    loadDetail(hit.session).then(() => {
+      setTimeout(() => document.getElementById(`msg-${hit.messageId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 200)
+    })
+  }
+
+  const backToOverview = () => {
+    setSelectedSession(null)
+    setDetail(null)
+  }
+
+  const deleteSession = async () => {
+    if (!selectedSession) return
+    if (!window.confirm(`删除会话到 cc-steward 回收区？\n\n${selectedSession.path}`)) return
     try {
-      const result = await api.sessions.delete(selected.agent, selected.id)
+      const result = await api.sessions.delete(selectedSession.agent, selectedSession.id)
       pushToast({ kind: 'success', message: `已移动到回收区：${result.trashPath}` })
-      setSelected(null)
-      setDetail(null)
-      await load()
+      backToOverview()
+      loadSessions(selectedProjectPath)
+      loadOverview()
     } catch (error) {
       pushToast({ kind: 'error', message: `删除失败：${error instanceof Error ? error.message : String(error)}` })
     }
@@ -118,69 +171,124 @@ export function SessionsPage({ agentId }: { agentId: ApiSessionAgent }) {
     pushToast({ kind: 'success', message: '路径已复制' })
   }
 
-  const filteredSessions = useMemo(() => sessions, [sessions])
+  const loadPage = (offset: number) => {
+    if (!selectedSession) return
+    loadDetail(selectedSession, { offset, limit: 50 })
+  }
+
+  const startResize = (pane: ResizePane, event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startLeft = leftWidth
+    const startRight = rightWidth
+    const onMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX
+      if (pane === 'left') {
+        setLeftWidth(clamp(startLeft + delta, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH))
+      } else {
+        setRightWidth(clamp(startRight - delta, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH))
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex-1 overflow-auto p-6 animate-fade-in">
-      <div className="mb-5 flex items-start gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-text-primary">{agentId === 'claude' ? 'Claude' : 'Codex'} 会话</h1>
-          <p className="mt-1 text-sm text-text-secondary">检索本地 {agentId === 'claude' ? 'Claude' : 'Codex'} 会话，查看消息、统计和清理历史文件。</p>
-        </div>
-        {loading && <span className="ml-auto text-2xs text-text-tertiary">刷新中</span>}
-      </div>
+    <div className="flex h-full overflow-hidden">
+      {/* Left sidebar: projects + sessions */}
+      <ProjectSidebar
+        agentId={agentId}
+        width={leftWidth}
+        projects={projects}
+        sessions={sessions}
+        selectedProjectPath={selectedProjectPath}
+        selectedSessionId={selectedSession?.id ?? null}
+        loadingSessions={loadingSessions}
+        query={query}
+        hits={hits}
+        searching={searching}
+        onQueryChange={setQuery}
+        onSelectProject={selectProject}
+        onSelectSession={selectSession}
+        onOpenHit={openSearchHit}
+      />
 
-      <div className="mb-4 flex items-center gap-3 flex-wrap">
-        <Segmented value={scope} values={['all', 'current-project']} labels={{ all: '全部项目', 'current-project': '当前项目' }} onChange={(value) => setScope(value as ScopeFilter)} />
-      </div>
+      <ResizeHandle side="left" onPointerDown={(event) => startResize('left', event)} />
 
-      <div className="space-y-4">
-        <OverviewStats overview={overview} />
-        <SessionSearch query={query} onQueryChange={setQuery} hits={hits} searching={searching} onOpenHit={openHit} />
-
-        <div className="grid grid-cols-[330px_1fr] gap-4 min-w-0">
-          <div className="space-y-4">
-            <ProjectSessionsOverview projects={projects} selectedProject={selectedProject} onSelectProject={setSelectedProject} />
-            <SessionList sessions={filteredSessions} selectedId={selected?.id ?? null} onSelect={setSelected} />
-          </div>
-          <SessionDetail
+      {/* Main content */}
+      <div className="flex-1 overflow-auto min-w-0">
+        {mainView === 'overview' && (
+          <OverviewDashboard
+            agentId={agentId}
+            overview={overview}
+            projects={projects}
+            loading={loadingOverview}
+            onSelectProject={selectProject}
+          />
+        )}
+        {mainView === 'conversation' && (
+          <ConversationViewer
             detail={detail}
             loading={loadingDetail}
             roleFilter={roleFilter}
             showTools={showTools}
             onRoleFilter={setRoleFilter}
-            onToggleTools={() => setShowTools((value) => !value)}
-            onDelete={deleteSelected}
+            onToggleTools={() => setShowTools((v) => !v)}
+            onDelete={deleteSession}
             onCopyPath={copyPath}
+            onBack={backToOverview}
+            onLoadPage={loadPage}
           />
-        </div>
+        )}
       </div>
+
+      {/* Right sidebar: stats + navigator (only in conversation view) */}
+      {mainView === 'conversation' && detail && (
+        <>
+          <ResizeHandle side="right" onPointerDown={(event) => startResize('right', event)} />
+          <div className="shrink-0 bg-surface-base overflow-auto p-3 space-y-4" style={{ width: rightWidth }}>
+            <SessionStatsPanel stats={detail.stats} />
+            <MessageNavigator
+              messages={detail.messages}
+              roleFilter={roleFilter}
+              onRoleFilter={setRoleFilter}
+              onJump={(id) => document.getElementById(`msg-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-function Segmented<T extends string>({
-  value,
-  values,
-  labels,
-  onChange,
+function ResizeHandle({
+  side,
+  onPointerDown,
 }: {
-  value: T
-  values: T[]
-  labels: Record<T, string>
-  onChange: (value: T) => void
+  side: 'left' | 'right'
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }) {
   return (
-    <div className="flex gap-1 p-1 bg-surface-card border border-border-default rounded-lg">
-      {values.map((item) => (
-        <button
-          key={item}
-          onClick={() => onChange(item)}
-          className={`px-3 py-1.5 rounded-md text-xs transition-colors ${value === item ? 'bg-accent-blue text-white' : 'text-text-secondary hover:bg-surface-hover'}`}
-        >
-          {labels[item]}
-        </button>
-      ))}
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      title="拖动调整区域宽度"
+      onPointerDown={onPointerDown}
+      className={`group relative z-10 w-1.5 shrink-0 cursor-col-resize bg-border-default/70 hover:bg-accent-blue/40 transition-colors ${
+        side === 'left' ? 'border-x border-border-subtle' : 'border-x border-border-subtle'
+      }`}
+    >
+      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-default group-hover:bg-accent-blue" />
     </div>
   )
 }

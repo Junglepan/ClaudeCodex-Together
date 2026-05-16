@@ -1,34 +1,4 @@
-import { Activity, Database, MessageSquare, Terminal } from 'lucide-react'
-import type { ApiSessionOverview, ApiSessionStats } from '@/core/api'
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-export function OverviewStats({ overview }: { overview: ApiSessionOverview | null }) {
-  const items = [
-    { label: '会话', value: overview?.totalSessions ?? 0, Icon: MessageSquare },
-    { label: '消息', value: overview?.totalMessages ?? 0, Icon: Activity },
-    { label: '工具调用', value: overview?.totalToolCalls ?? 0, Icon: Terminal },
-    { label: '占用', value: formatBytes(overview?.totalSizeBytes ?? 0), Icon: Database },
-  ]
-
-  return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {items.map(({ label, value, Icon }) => (
-        <div key={label} className="border border-border-default bg-surface-card rounded-lg p-3">
-          <div className="flex items-center gap-2 text-text-tertiary text-2xs">
-            <Icon size={13} />
-            {label}
-          </div>
-          <div className="mt-2 text-lg font-semibold text-text-primary">{value}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
+import type { ApiSessionStats } from '@/core/api'
 
 export function SessionStatsPanel({ stats }: { stats: ApiSessionStats }) {
   return (

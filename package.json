@@ -1,7 +1,7 @@
 {
   "name": "cc-steward",
   "type": "module",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "cc-steward — 本地 Claude Code / Codex CLI 配置管家",
   "main": "dist-electron/main.js",
   "scripts": {

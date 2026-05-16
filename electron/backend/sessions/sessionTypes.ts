@@ -15,6 +15,8 @@ export interface ListSessionsRequest {
 export interface SessionDetailRequest {
   agent: SessionAgent
   sessionId: string
+  offset?: number
+  limit?: number
 }
 
 export interface SearchSessionsRequest {
@@ -24,6 +26,7 @@ export interface SearchSessionsRequest {
   query: string
   role?: SessionRole
   toolName?: string
+  maxResults?: number
 }
 
 export interface DeleteSessionRequest {
@@ -46,6 +49,7 @@ export interface SessionSummary {
   messageCount: number
   updatedAt: string
   sizeBytes: number
+  nativeId?: string
 }
 
 export interface SessionMessage {
@@ -57,13 +61,14 @@ export interface SessionMessage {
   toolStatus?: 'ok' | 'error' | 'unknown'
   skillName?: string
   subagentName?: string
-  raw?: unknown
+  subType?: 'tool_use' | 'tool_result'
 }
 
 export interface SessionDetail extends SessionSummary {
   messages: SessionMessage[]
   stats: SessionStats
   rawPreview?: string
+  pagination?: { offset: number; limit: number; total: number }
 }
 
 export interface SessionSearchHit {

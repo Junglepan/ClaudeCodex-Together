@@ -5,6 +5,7 @@ import type {
   SessionOverview,
   SessionStats,
   SessionSummary,
+  SessionsOverviewRequest,
 } from './sessionTypes'
 
 function emptyAgentBreakdown(): Record<SessionAgent, number> {
@@ -54,14 +55,21 @@ export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'size
   }
 }
 
-export function aggregateProjects(details: SessionDetail[]): ProjectSessionOverview[] {
-  const projects = new Map<string, ProjectSessionOverview>()
-  const toolCounts = new Map<string, Map<string, number>>()
+export function filterSummaries(summaries: SessionSummary[], request: { agent?: SessionAgent; projectPath?: string; scope?: 'current-project' | 'all' }) {
+  return summaries.filter((summary) => {
+    if (request.agent && summary.agent !== request.agent) return false
+    if (request.scope === 'current-project' && summary.projectPath !== request.projectPath) return false
+    if (request.scope === 'all' && request.projectPath && summary.projectPath !== request.projectPath) return false
+    return true
+  })
+}
 
-  for (const detail of details) {
-    const key = detail.projectPath ?? '__unknown__'
+export function aggregateProjectsFromSummaries(summaries: SessionSummary[]): ProjectSessionOverview[] {
+  const projects = new Map<string, ProjectSessionOverview>()
+  for (const summary of summaries) {
+    const key = summary.projectPath ?? '__unknown__'
     const current = projects.get(key) ?? {
-      projectPath: detail.projectPath,
+      projectPath: summary.projectPath,
       sessionCount: 0,
       messageCount: 0,
       toolCallCount: 0,
@@ -71,69 +79,42 @@ export function aggregateProjects(details: SessionDetail[]): ProjectSessionOverv
       topTools: [],
     }
     current.sessionCount += 1
-    current.messageCount += detail.stats.messageCount
-    current.toolCallCount += detail.stats.toolCallCount
-    current.totalSizeBytes += detail.sizeBytes
-    current.agentBreakdown[detail.agent] += 1
-    if (!current.lastActiveAt || detail.updatedAt > current.lastActiveAt) current.lastActiveAt = detail.updatedAt
+    current.messageCount += summary.messageCount
+    current.totalSizeBytes += summary.sizeBytes
+    current.agentBreakdown[summary.agent] += 1
+    if (!current.lastActiveAt || summary.updatedAt > current.lastActiveAt) current.lastActiveAt = summary.updatedAt
     projects.set(key, current)
-
-    const projectTools = toolCounts.get(key) ?? new Map<string, number>()
-    for (const tool of detail.stats.tools) {
-      projectTools.set(tool.name, (projectTools.get(tool.name) ?? 0) + tool.count)
-    }
-    toolCounts.set(key, projectTools)
   }
-
-  for (const [key, project] of projects.entries()) {
-    project.topTools = topCounts(toolCounts.get(key) ?? new Map()).slice(0, 5)
-  }
-
   return [...projects.values()].sort((a, b) => {
     const activeCompare = (b.lastActiveAt ?? '').localeCompare(a.lastActiveAt ?? '')
     return activeCompare || (a.projectPath ?? '').localeCompare(b.projectPath ?? '')
   })
 }
 
-export function buildOverview(details: SessionDetail[], request: { scope: 'user' | 'project'; projectPath?: string }): SessionOverview {
+export function buildOverviewFromSummaries(summaries: SessionSummary[], request: SessionsOverviewRequest): SessionOverview {
   const relevant = request.scope === 'project'
-    ? details.filter((detail) => detail.projectPath === request.projectPath)
-    : details
-  const tools = new Map<string, number>()
-  const skills = new Map<string, number>()
-  const subagents = new Map<string, number>()
+    ? summaries.filter((s) => s.projectPath === request.projectPath)
+    : summaries
   const agentBreakdown = emptyAgentBreakdown()
   const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
 
-  for (const detail of relevant) {
-    agentBreakdown[detail.agent] += 1
-    for (const tool of detail.stats.tools) tools.set(tool.name, (tools.get(tool.name) ?? 0) + tool.count)
-    for (const skill of detail.stats.skills) skills.set(skill.name, (skills.get(skill.name) ?? 0) + skill.count)
-    for (const subagent of detail.stats.subagents) subagents.set(subagent.name, (subagents.get(subagent.name) ?? 0) + subagent.count)
+  for (const s of relevant) {
+    agentBreakdown[s.agent] += 1
   }
 
   return {
     scope: request.scope,
     projectPath: request.projectPath,
     totalSessions: relevant.length,
-    totalMessages: relevant.reduce((sum, detail) => sum + detail.stats.messageCount, 0),
-    totalToolCalls: relevant.reduce((sum, detail) => sum + detail.stats.toolCallCount, 0),
-    failedToolCalls: relevant.reduce((sum, detail) => sum + detail.stats.failedToolCallCount, 0),
-    totalSizeBytes: relevant.reduce((sum, detail) => sum + detail.sizeBytes, 0),
-    recentSessionCount: relevant.filter((detail) => Date.parse(detail.updatedAt) >= recentCutoff).length,
+    totalMessages: relevant.reduce((sum, s) => sum + s.messageCount, 0),
+    totalToolCalls: 0,
+    failedToolCalls: 0,
+    totalSizeBytes: relevant.reduce((sum, s) => sum + s.sizeBytes, 0),
+    recentSessionCount: relevant.filter((s) => Date.parse(s.updatedAt) >= recentCutoff).length,
     agentBreakdown,
-    topProjects: aggregateProjects(relevant).slice(0, 8),
-    topTools: topCounts(tools).slice(0, 8),
-    topSkills: topConfidenceCounts(skills).slice(0, 8),
-    topSubagents: topConfidenceCounts(subagents).slice(0, 8),
+    topProjects: aggregateProjectsFromSummaries(relevant).slice(0, 8),
+    topTools: [],
+    topSkills: [],
+    topSubagents: [],
   }
-}
-
-export function filterSummaries(summaries: SessionSummary[], request: { agent?: SessionAgent; projectPath?: string; scope?: 'current-project' | 'all' }) {
-  return summaries.filter((summary) => {
-    if (request.agent && summary.agent !== request.agent) return false
-    if (request.scope === 'current-project' && summary.projectPath !== request.projectPath) return false
-    if (request.scope === 'all' && request.projectPath && summary.projectPath !== request.projectPath) return false
-    return true
-  })
 }

@@ -5,6 +5,34 @@
 
 ---
 
+## [1.2.0] — 2026-05-16
+
+### 改进
+- **会话管理 UI 三栏重构**（参考 claude-code-history-viewer）：
+  - **左侧边栏**：项目树 + 会话列表，搜索栏，项目折叠展开，选中高亮
+  - **中间主内容**：概览仪表盘（统计卡片 + Agent 分布 + 工具/技能 TOP 8 + 项目卡片）或对话查看器
+  - **右侧面板**：会话统计 + 消息导航（仅对话模式显示）
+  - **对话查看器**：聊天气泡风格（用户蓝 / AI 白 / 工具琥珀），头像区分角色，工具消息可折叠，时间戳，分页加载
+  - 角色过滤（全部/用户/AI）、工具消息开关、删除/复制路径操作栏
+- **轻量级会话列表**：`listSessions` 不再读取并解析全部消息，改为只读取文件 stat + 前 4KB 提取标题和项目路径，大幅降低列表加载时间
+- **会话详情分页**：`sessions.detail` 新增 `offset/limit` 参数，默认返回最后 50 条消息；前端支持「加载更早/更多消息」翻页
+- **概览轻量聚合**：`sessions.overview` 和 `sessions.projects` 不再需要读取全部会话详情，直接从 Summary 聚合
+- **搜索边界**：会话搜索新增 `maxResults`（默认 100）和单文件 2MB 上限，避免大文件扫描卡顿
+- **复制操作**：对话查看器顶栏支持一键复制项目路径、文件路径、Session ID（UUID）、Resume 命令（`claude --resume <uuid>`）
+
+### 修复
+- **空消息过滤**：Claude JSONL 元数据行（permission-mode、file-history-snapshot、attachment、ai-title、last-prompt、queue-operation、summary、result）不再显示为空消息
+- **工具消息拆分**：`tool_use` 和 `tool_result` content blocks 现在拆分为独立消息，分别以蓝色（调用）和琥珀色（结果）样式展示；错误结果显示红色
+- **thinking block 过滤**：AI 思考块不再显示在对话中
+
+### 新增
+- **Codex 会话解析器**（`codexSessions.ts`）：完整支持 Codex JSONL 格式（session_meta / event_msg / response_item），正确提取项目路径和会话 ID
+  - 支持 event_msg（user_message / agent_message）和 response_item（function_call / function_call_output / message / custom_tool_call）
+  - `extractMetaFast`：regex 提取 cwd/id/title，避免解析 22KB+ 的 session_meta 行
+- **子代理文件过滤**：`collectSessionFiles` 跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，并过滤小于 200 字节的文件（消除 `.meta.json` 干扰）
+
+---
+
 ## [1.1.2] — 2026-05-15
 
 ### 改进

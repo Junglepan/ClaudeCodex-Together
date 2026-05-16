@@ -2,7 +2,7 @@
 
 > 每次功能迭代或方案更新后刷新本文档，保持其反映当前实现而非历史。
 
-最近更新：2026-05-15
+最近更新：2026-05-16
 
 ## 1. 总体架构
 
@@ -57,6 +57,7 @@ cc-steward 不再启动 Python/FastAPI 后端，也不监听 localhost 业务端
 | ActiveConfig | `src/modules/active-config/` | 当前生效的配置文件列表 |
 | PathMapping | `src/modules/path-mapping/` | Claude ↔ Codex 文件对照表 |
 | SyncCenter | `src/modules/sync/` | 同步概览（规则/映射/流程图）+ 独立同步执行面板（5 阶段） |
+| Sessions | `src/modules/sessions/` | 会话管理 — 三视图导航（概览/列表/详情），Claude 和 Codex 分别注册 |
 | Help | `src/modules/help/` | 帮助文档 + 配置关系树（ClaudeRelTree） |
 | Settings | `src/modules/settings/` | 偏好设置（外观/快捷键/运行环境/关于） |
 | FileDetail | `src/modules/config-files/` | 文件详情面板（编辑/删除/hooks 解析/同步状态） |
@@ -168,3 +169,26 @@ cc-steward 不再启动 Python/FastAPI 后端，也不监听 localhost 业务端
 | hooks.json 语法 | 解析失败报 error |
 
 **迁移报告（`syncReport`）：** 生成 Markdown 格式，包含概要统计、逐项明细、警告与人工审查项、备份记录、验证结果。
+
+## 10. 会话管理
+
+后端位于 `electron/backend/sessions/`：
+
+- `claudeSessions.ts`：Claude 会话发现 — 递归扫描 `~/.claude/projects/**/*.jsonl`（跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，过滤 <200 字节文件）。轻量列表只读 stat + 前 4KB 提取标题/项目路径；详情支持分页（offset/limit）。元数据行（permission-mode、file-history-snapshot、attachment、ai-title 等 8 种）自动过滤。`tool_use`/`tool_result` content blocks 拆分为独立消息，thinking blocks 跳过。
+- `codexSessions.ts`：Codex 会话发现 — 扫描 `~/.codex/sessions/`，独立解析器支持 Codex JSONL 格式（session_meta / event_msg / response_item）。`extractMetaFast` 使用 regex 提取 cwd/id/title（避免 JSON.parse 22KB+ 的 session_meta 行）。支持 function_call、function_call_output、custom_tool_call 等工具消息。
+- `sessionAnalytics.ts`：统计聚合 — `buildSessionStats`（从消息构建工具/技能/子代理统计）、`aggregateProjectsFromSummaries`/`buildOverviewFromSummaries`（从轻量 Summary 聚合，不需要读取全部消息）。
+- `sessionSearch.ts`：全文搜索 — 遍历会话消息查找匹配，支持角色和工具名过滤，`maxResults` 上限 100，单文件 2MB 跳过。
+- `sessionTrash.ts`：软删除 — 移动到回收区并写 manifest.json。
+- `sessionWatchPaths.ts`：返回需要监听的目录路径。
+
+**会话 ID：** `SHA1(agent:absolutePath)`，稳定且跨平台唯一。**Native ID：** 从文件名提取 UUID，用于 `claude --resume` 命令。
+
+**前端三栏布局：**
+
+| 区域 | 组件 | 功能 |
+|------|------|------|
+| 左侧边栏（280px） | `ProjectSidebar` | 项目树 + 会话列表，搜索，折叠展开 |
+| 中间主内容 | `OverviewDashboard` 或 `ConversationViewer` | 概览仪表盘（统计/分布/TOP 工具技能/项目卡片）或聊天气泡对话查看 |
+| 右侧面板（220px，条件显示） | `SessionStatsPanel` + `MessageNavigator` | 会话统计 + 消息角色导航（仅对话模式） |
+
+**对话查看器特性：** 聊天气泡（用户蓝右对齐 / AI 白左对齐 / tool_use 蓝边框 / tool_result 琥珀边框 / 错误红色），角色过滤（全部/用户/AI），工具消息开关，可折叠长工具输出，分页加载（默认最后 50 条），一键复制项目路径/文件路径/Session ID/Resume 命令。
