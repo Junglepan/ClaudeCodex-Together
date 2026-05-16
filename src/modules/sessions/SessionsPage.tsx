@@ -16,12 +16,10 @@ import { SessionDetail } from './SessionDetail'
 import { SessionList } from './SessionList'
 import { SessionSearch } from './SessionSearch'
 
-type AgentFilter = ApiSessionAgent | 'all'
 type ScopeFilter = 'current-project' | 'all'
 
-export function SessionsPage() {
+export function SessionsPage({ agentId }: { agentId: ApiSessionAgent }) {
   const { projectPath, pushToast } = useAppStore()
-  const [agent, setAgent] = useState<AgentFilter>('all')
   const [scope, setScope] = useState<ScopeFilter>('all')
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [sessions, setSessions] = useState<ApiSessionSummary[]>([])
@@ -38,7 +36,7 @@ export function SessionsPage() {
   const [showTools, setShowTools] = useState(true)
 
   const effectiveProject = selectedProject ?? (scope === 'current-project' ? projectPath : undefined)
-  const apiAgent = agent === 'all' ? undefined : agent
+  const apiAgent: ApiSessionAgent = agentId
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -126,14 +124,13 @@ export function SessionsPage() {
     <div className="flex-1 overflow-auto p-6 animate-fade-in">
       <div className="mb-5 flex items-start gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-text-primary">会话管理</h1>
-          <p className="mt-1 text-sm text-text-secondary">按项目检索本地 Claude / Codex 会话，查看消息、统计和清理历史文件。</p>
+          <h1 className="text-xl font-semibold text-text-primary">{agentId === 'claude' ? 'Claude' : 'Codex'} 会话</h1>
+          <p className="mt-1 text-sm text-text-secondary">检索本地 {agentId === 'claude' ? 'Claude' : 'Codex'} 会话，查看消息、统计和清理历史文件。</p>
         </div>
         {loading && <span className="ml-auto text-2xs text-text-tertiary">刷新中</span>}
       </div>
 
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        <Segmented value={agent} values={['all', 'claude', 'codex']} labels={{ all: '全部', claude: 'Claude', codex: 'Codex' }} onChange={(value) => setAgent(value as AgentFilter)} />
         <Segmented value={scope} values={['all', 'current-project']} labels={{ all: '全部项目', 'current-project': '当前项目' }} onChange={(value) => setScope(value as ScopeFilter)} />
       </div>
 
