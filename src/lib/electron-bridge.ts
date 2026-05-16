@@ -6,6 +6,7 @@
 interface CctBridge {
   platform: NodeJS.Platform
   isElectron: true
+  api: (request: { endpoint: string; payload?: Record<string, unknown> }) => Promise<unknown>
   revealInFinder: (path: string) => Promise<void>
   openFile: (path: string) => Promise<void>
   openInTerminal: (dirPath: string) => Promise<void>
@@ -29,6 +30,11 @@ export const isElectron = typeof window !== 'undefined' && !!window.cct?.isElect
 
 export const electronApi = {
   isElectron,
+
+  async backend<T>(endpoint: string, payload?: Record<string, unknown>): Promise<T> {
+    if (!window.cct) throw new Error('Electron backend IPC is unavailable')
+    return window.cct.api({ endpoint, payload }) as Promise<T>
+  },
 
   async revealInFinder(p: string) {
     if (!window.cct) throw new Error('Not running in Electron')

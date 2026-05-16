@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle, FolderOpen, Terminal, Zap } from 'lucide-react'
+import { Copy, ArrowRight, FileX, Info, Pencil, Trash2, Check, X, AlertTriangle, FolderOpen, Terminal, Zap, Maximize2, Minimize2 } from 'lucide-react'
 import { api } from '@/core/api'
 import { agentRegistry } from '@/core/agent-registry'
 import { useAppStore } from '@/store'
@@ -291,18 +291,33 @@ function EditorTextarea({
 }
 
 function ContentViewer({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false)
   const MAX = 2000
-  const truncated = content.length > MAX
+  const truncated = !expanded && content.length > MAX
   const display   = truncated ? content.slice(0, MAX) : content
-  const lines     = display.split('\n').length
+  const totalLines = content.split('\n').length
+  const displayLines = display.split('\n').length
 
   return (
     <div className="border border-border-default rounded-lg overflow-hidden">
       <div className="px-3 py-1.5 bg-surface-base border-b border-border-subtle flex items-center justify-between">
-        <span className="text-2xs text-text-tertiary">{lines} 行{truncated ? '（已截断）' : ''}</span>
-        <CopyBtn text={content} />
+        <span className="text-2xs text-text-tertiary">
+          {expanded ? `${totalLines} 行` : `${displayLines} 行${content.length > MAX ? `（共 ${totalLines} 行）` : ''}`}
+        </span>
+        <div className="flex items-center gap-2">
+          {content.length > MAX && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 text-2xs text-accent-blue hover:text-blue-600 transition-colors"
+            >
+              {expanded ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+              {expanded ? '收起' : '查看完整内容'}
+            </button>
+          )}
+          <CopyBtn text={content} />
+        </div>
       </div>
-      <pre className="p-3 text-xs font-mono text-text-primary overflow-auto max-h-64 leading-relaxed bg-surface-card">
+      <pre className={`p-3 text-xs font-mono text-text-primary overflow-auto leading-relaxed bg-surface-card ${expanded ? 'max-h-[70vh]' : 'max-h-64'}`}>
         {display}
         {truncated && <span className="text-text-tertiary">{'\n'}…（内容已截断）</span>}
       </pre>

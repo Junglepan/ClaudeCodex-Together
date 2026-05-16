@@ -194,14 +194,12 @@ function BackupSection() {
   const exportZip = async () => {
     setDownloading(true)
     try {
-      const url = `/api/backup/export${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const blob = await res.blob()
+      const backup = await api.backup.export(projectPath)
+      const blob = new Blob([new Uint8Array(backup.data)], { type: 'application/zip' })
       const a = document.createElement('a')
       const objectUrl = URL.createObjectURL(blob)
       a.href = objectUrl
-      a.download = `cc-steward-backup-${new Date().toISOString().slice(0, 10)}.zip`
+      a.download = backup.filename
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -261,6 +259,7 @@ function EnvironmentSection() {
   const [meta, setMeta]       = useState<ApiMeta | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  const frontendAddress = typeof window === 'undefined' ? '—' : window.location.href
 
   const load = () => {
     setLoading(true); setError(null)
@@ -294,9 +293,8 @@ function EnvironmentSection() {
           <InfoRow label="HOME"        value={meta?.home_path ?? '—'}                   mono copyable />
           <InfoRow label="平台"         value={meta?.platform ?? platform ?? '—'} />
           <InfoRow label="主机名"       value={meta?.hostname ?? '—'}                   mono />
-          <InfoRow label="Python 版本"  value={meta?.python_version ?? '—'}             mono />
-          <InfoRow label="后端地址"     value="http://127.0.0.1:8765" mono copyable />
-          <InfoRow label="前端地址"     value="http://localhost:5174" mono copyable />
+          <InfoRow label="后端"         value="Electron IPC"                            mono />
+          <InfoRow label="前端地址"     value={frontendAddress} mono copyable />
         </div>
       )}
     </SectionFrame>

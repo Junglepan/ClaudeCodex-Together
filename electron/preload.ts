@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('cct', {
   platform: process.platform,
   isElectron: true,
 
+  api: (request: { endpoint: string; payload?: Record<string, unknown> }): Promise<unknown> =>
+    ipcRenderer.invoke('cct:api', request),
+
   revealInFinder: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('cct:reveal-in-finder', filePath),
 
@@ -40,6 +43,7 @@ contextBridge.exposeInMainWorld('cct', {
   onMenuAction: (cb: (action: string, payload?: unknown) => void) => {
     ipcRenderer.on('cct:menu-refresh',         () => cb('refresh'))
     ipcRenderer.on('cct:menu-toggle-sidebar',  () => cb('toggle-sidebar'))
+    ipcRenderer.on('cct:menu-toggle-theme',    () => cb('toggle-theme'))
     ipcRenderer.on('cct:menu-navigate',        (_e, route: string) => cb('navigate', route))
   },
   offAll: () => {
@@ -47,6 +51,7 @@ contextBridge.exposeInMainWorld('cct', {
     ipcRenderer.removeAllListeners('cct:switch-project')
     ipcRenderer.removeAllListeners('cct:menu-refresh')
     ipcRenderer.removeAllListeners('cct:menu-toggle-sidebar')
+    ipcRenderer.removeAllListeners('cct:menu-toggle-theme')
     ipcRenderer.removeAllListeners('cct:menu-navigate')
   },
 })

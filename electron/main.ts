@@ -1,66 +1,23 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron'
-import { spawn, ChildProcess } from 'child_process'
+import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem, Tray, nativeImage } from 'electron'
+import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import { handleBackendRequest, type BackendRequest } from './backend/api'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
-const BACKEND_PORT = 8765
 const FRONTEND_PORT = 5174
 
 let mainWindow: BrowserWindow | null = null
-let backendProcess: ChildProcess | null = null
+let tray: Tray | null = null
 let watcherCleanup: (() => void) | null = null
-
-// ── Backend ──────────────────────────────────────────────────────────────────
-
-function resolvePythonCommand() {
-  const candidates = process.platform === 'win32'
-    ? ['python.exe', 'python']
-    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
-
-  return candidates.find((candidate) => {
-    if (path.isAbsolute(candidate)) return fs.existsSync(candidate)
-    return true
-  }) ?? 'python3'
-}
-
-function resolveBackendDir() {
-  if (isDev) return path.join(__dirname, '..', 'backend')
-
-  const candidates = [
-    path.join(process.resourcesPath, 'app.asar.unpacked', 'backend'),
-    path.join(process.resourcesPath, 'backend'),
-  ]
-
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
-}
-
-function startBackend() {
-  const backendDir = resolveBackendDir()
-  const pythonCommand = resolvePythonCommand()
-
-  backendProcess = spawn(pythonCommand, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
-    cwd: backendDir,
-    stdio: isDev ? 'inherit' : 'pipe',
-  })
-
-  backendProcess.on('error', (err) => {
-    console.error('Failed to start backend:', err)
-  })
-
-  console.log('Backend started on port', BACKEND_PORT, 'using', pythonCommand, 'in', backendDir)
-}
-
-function stopBackend() {
-  if (backendProcess) {
-    backendProcess.kill()
-    backendProcess = null
-  }
-}
 
 // ── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpc() {
+  ipcMain.handle('cct:api', async (_e, request: BackendRequest) => {
+    return handleBackendRequest(request)
+  })
+
   ipcMain.handle('cct:reveal-in-finder', async (_e, filePath: string) => {
     shell.showItemInFolder(filePath)
   })
@@ -191,6 +148,11 @@ function buildAppMenu() {
           accelerator: 'CmdOrCtrl+B',
           click: () => mainWindow?.webContents.send('cct:menu-toggle-sidebar'),
         },
+        {
+          label: '切换主题',
+          accelerator: 'Shift+CmdOrCtrl+D',
+          click: () => mainWindow?.webContents.send('cct:menu-toggle-theme'),
+        },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const },
         ...(isDev ? [
@@ -227,6 +189,10 @@ function buildAppMenu() {
           label: '偏好设置',
           accelerator: 'CmdOrCtrl+,',
           click: () => mainWindow?.webContents.send('cct:menu-navigate', '/settings'),
+        },
+        {
+          label: '在 GitHub 查看',
+          click: () => shell.openExternal('https://github.com/Junglepan/ClaudeCodex-Together'),
         },
       ],
     },
@@ -318,12 +284,66 @@ function createWindow() {
   })
 }
 
+// ── System tray ──────────────────────────────────────────────────────────────
+
+function createTray() {
+  const iconPath = isDev
+    ? path.join(__dirname, '..', 'assets', 'icon.png')
+    : path.join(process.resourcesPath, 'assets', 'icon.png')
+
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 })
+  icon.setTemplateImage(true)
+
+  tray = new Tray(icon)
+  tray.setToolTip('CC Steward')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      },
+    },
+    {
+      label: '同步中心',
+      click: () => {
+        if (!mainWindow) createWindow()
+        mainWindow?.show()
+        mainWindow?.webContents.send('cct:menu-navigate', '/sync')
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        tray?.destroy()
+        tray = null
+        app.quit()
+      },
+    },
+  ])
+
+  tray.setContextMenu(contextMenu)
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show()
+    } else {
+      createWindow()
+    }
+  })
+}
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu())
   registerIpc()
-  startBackend()
+  createTray()
 
   setTimeout(createWindow, isDev ? 0 : 1500)
 
@@ -333,10 +353,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  stopBackend()
   if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('before-quit', () => {
-  stopBackend()
 })

@@ -1,16 +1,7 @@
-const IS_FILE_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'file:'
-const BASE = IS_FILE_PROTOCOL ? 'http://127.0.0.1:8765' : '/api'
+import { electronApi } from '@/lib/electron-bridge'
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`API ${res.status}: ${text || res.statusText}`)
-  }
-  return res.json() as Promise<T>
+async function request<T>(endpoint: string, payload?: Record<string, unknown>): Promise<T> {
+  return electronApi.backend<T>(endpoint, payload)
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -57,15 +48,27 @@ export interface ApiFileDetail {
   parsed_hooks?: ParsedHook[] | null
 }
 
+export interface StructuredWarnings {
+  removed_lines: string[]
+  tool_comments: string[]
+  check_lines: Array<{ line: number; content: string }>
+  manual_notes?: string[]
+}
+
 export interface ApiSyncItem {
-  status: 'added' | 'check' | 'unsupported' | 'not_added'
+  id?: string
+  status: 'added' | 'check' | 'unsupported' | 'not_added' | 'conflict'
   type: 'Instruction' | 'Skill' | 'Subagent' | 'Hook' | 'Command' | 'Settings' | 'MCP' | 'Plugin'
   name: string
   source: string
   target: string
   notes: string
   warnings?: string[]
-  dry_run_action?: 'would_write' | 'would_skip' | 'skip_unsupported' | 'unknown'
+  structured_warnings?: StructuredWarnings | null
+  dry_run_action?: 'would_write' | 'would_skip' | 'would_overwrite' | 'skip_unsupported' | 'unknown'
+  source_content?: string
+  target_content?: string
+  existing_content?: string
 }
 
 export interface ApiSyncScanResult {
@@ -82,6 +85,7 @@ export interface ApiSyncDryRunResult {
   items: ApiSyncItem[]
   would_write: string[]
   would_skip: string[]
+  would_overwrite: string[]
 }
 
 export interface ApiSyncResult {
@@ -89,7 +93,20 @@ export interface ApiSyncResult {
   items: ApiSyncItem[]
   written: string[]
   skipped: string[]
+  overwritten: string[]
+  backups: Array<{ target: string; backup: string }>
   errors?: string[]
+}
+
+export interface ApiValidationItem {
+  status: 'ok' | 'warning' | 'error'
+  target: string
+  type: string
+  detail: string
+}
+
+export interface ApiValidationResult {
+  items: ApiValidationItem[]
 }
 
 export interface ResolvedSettingsRow {
@@ -121,6 +138,33 @@ export interface ApiResolvedConfig {
   agents: ResolvedScopeItem[]
 }
 
+export interface ApiSkillItem {
+  name: string
+  description: string
+  source: 'global' | 'project'
+  path: string
+  content: string
+}
+
+export interface ApiSubagentItem {
+  name: string
+  description: string
+  source: 'global' | 'project'
+  path: string
+  content: string
+  format: 'md' | 'toml'
+  tools?: string[]
+}
+
+export interface ApiMcpServerItem {
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  source: 'global' | 'project'
+  origin: string
+}
+
 export interface ApiMeta {
   project_path: string
   home_path: string
@@ -132,79 +176,79 @@ export interface ApiMeta {
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const api = {
-  health: () => request<{ status: string; version: string }>('/health'),
+  health: () => request<{ status: string; version: string }>('health'),
 
-  meta: () => request<ApiMeta>('/meta'),
+  meta: () => request<ApiMeta>('meta'),
 
   agents: {
     list: (projectPath?: string) =>
-      request<ApiAgentSummary[]>(
-        `/agents${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
-      ),
+      request<ApiAgentSummary[]>('agents.list', { project: projectPath }),
 
     files: (agentId: string, projectPath?: string) =>
-      request<ApiConfigFile[]>(
-        `/agents/${agentId}/files${projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''}`,
-      ),
+      request<ApiConfigFile[]>('agents.files', { agentId, project: projectPath }),
   },
 
   files: {
     read: (path: string) =>
-      request<ApiFileDetail>(`/files/read?path=${encodeURIComponent(path)}`),
+      request<ApiFileDetail>('files.read', { path }),
 
     meta: (agentId: string, fileKey: string, projectPath?: string) =>
-      request<ApiFileDetail>(
-        `/files/meta?agent=${agentId}&key=${fileKey}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
-      ),
+      request<ApiFileDetail>('files.meta', { agentId, key: fileKey, project: projectPath }),
 
     write: (path: string, content: string) =>
-      request<{ path: string; written: boolean }>(
-        '/files/write',
-        { method: 'POST', body: JSON.stringify({ path, content }) },
-      ),
+      request<{ path: string; written: boolean }>('files.write', { path, content }),
 
     delete: (path: string) =>
-      request<{ path: string; deleted: boolean }>(
-        `/files/delete?path=${encodeURIComponent(path)}`,
-        { method: 'DELETE' },
-      ),
+      request<{ path: string; deleted: boolean }>('files.delete', { path }),
   },
 
   sync: {
     scan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncScanResult>(
-        '/sync/scan',
-        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
-      ),
+      request<ApiSyncScanResult>('sync.scan', { scope, project_path: projectPath }),
 
-    plan: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
-      request<ApiSyncPlan>(
-        '/sync/plan',
-        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath }) },
-      ),
+    plan: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
+      request<ApiSyncPlan>('sync.plan', { scope, project_path: projectPath, replace }),
 
-    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
-      request<ApiSyncDryRunResult>(
-        '/sync/dry-run',
-        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath, replace }) },
-      ),
+    dryRun: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false, itemIds?: string[]) =>
+      request<ApiSyncDryRunResult>('sync.dryRun', { scope, project_path: projectPath, replace, item_ids: itemIds }),
 
-    execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false) =>
-      request<ApiSyncResult>(
-        '/sync/execute',
-        { method: 'POST', body: JSON.stringify({ scope, project_path: projectPath, replace }) },
-      ),
+    execute: (scope: 'global' | 'project' | 'all', projectPath?: string, replace = false, itemIds?: string[]) =>
+      request<ApiSyncResult>('sync.execute', { scope, project_path: projectPath, replace, item_ids: itemIds }),
+
+    validate: (scope: 'global' | 'project' | 'all', projectPath?: string) =>
+      request<ApiValidationResult>('sync.validate', { scope, project_path: projectPath }),
+
+    report: (executeResult: ApiSyncResult, validation?: ApiValidationResult) =>
+      request<string>('sync.report', { executeResult, validation }),
   },
 
   projects: {
-    list: () => request<ApiProject[]>(`/projects`),
+    list: () => request<ApiProject[]>('projects.list'),
+  },
+
+  skills: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiSkillItem[]>('skills.list', { agentId, project: projectPath }),
+  },
+
+  subagents: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiSubagentItem[]>('subagents.list', { agentId, project: projectPath }),
+  },
+
+  mcp: {
+    list: (agentId: string, projectPath?: string) =>
+      request<ApiMcpServerItem[]>('mcp.list', { agentId, project: projectPath }),
   },
 
   config: {
     resolved: (agentId: string, projectPath?: string) =>
-      request<ApiResolvedConfig>(
-        `/config/resolved?agent=${agentId}${projectPath ? `&project=${encodeURIComponent(projectPath)}` : ''}`,
-      ),
+      request<ApiResolvedConfig>('config.resolved', { agentId, project: projectPath }),
+  },
+
+  backup: {
+    export: (projectPath?: string) =>
+      request<{ filename: string; data: number[] }>('backup.export', { project: projectPath }),
   },
 }
 

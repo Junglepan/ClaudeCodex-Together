@@ -71,13 +71,12 @@ cc-steward 是一个**本地桌面配置管理工具**，帮助同时使用 Clau
 │  └──────────┘  └──────────────┘  └───────────────┘  │
 │                      Zustand Store                   │
 │         （projectPath / recentProjects 持久化）        │
-├──────────────────────────────┬──────────────────────┤
-│   API Client (src/core/api)  │   Mock Data Fallback  │
-│   fetch → /api/*             │   自动降级（无后端时）  │
-├──────────────────────────────┴──────────────────────┤
-│           FastAPI 后端 (Python 3.11, port 8765)      │
-│  /agents  /files  /sync  /config  /health  /meta    │
-│  /backup                                             │
+├─────────────────────────────────────────────────────┤
+│   API Client (src/core/api) → Electron IPC           │
+│   preload.ts → ipcMain.handle("cct:api")             │
+├─────────────────────────────────────────────────────┤
+│           Electron 主进程内置 Node.js 后端             │
+│  agents/files/sync/config/projects/backup/meta       │
 ├─────────────────────────────────────────────────────┤
 │                   本地文件系统                        │
 │   ~/.claude/   ~/.codex/   {project}/               │
@@ -89,7 +88,7 @@ cc-steward 是一个**本地桌面配置管理工具**，帮助同时使用 Clau
 | 技术 | 用途 |
 |------|------|
 | React 18 + TypeScript | UI 框架 |
-| Vite | 构建工具，开发代理 `/api` → `127.0.0.1:8765` |
+| Vite | 前端构建与开发服务器 |
 | Tailwind CSS | 样式，自定义设计 Token（`surface`、`text`、`accent`、`status`） |
 | Zustand | 全局状态（projectPath、recentProjects、sidebarCollapsed、theme） |
 | React Router v6 | 客户端路由，模块动态注册路由 |
@@ -99,19 +98,13 @@ cc-steward 是一个**本地桌面配置管理工具**，帮助同时使用 Clau
 
 | 技术 | 用途 |
 |------|------|
-| FastAPI (Python) | REST API 服务，本地 127.0.0.1:8765 |
-| Pydantic | 请求/响应类型校验 |
-| pathlib | 跨平台文件路径操作 |
+| Electron IPC | Renderer 与主进程本地后端通信 |
+| Node.js fs/path/os | 本地文件读写、目录扫描与平台信息 |
+| smol-toml / jszip | TOML 解析与备份 ZIP 生成 |
 
-### 3.4 Mock 降级机制
+### 3.4 本地后端通信
 
-前端 API 客户端内置自动降级逻辑：
-1. 首次请求时 probe `/api/health`（800ms 超时）
-2. 后端不可达 → `useMock = true`，后续请求全部返回预置 mock 数据
-3. UI 顶部显示"演示模式"横幅
-4. 开发/预览阶段可 `VITE_USE_MOCK=true` 强制 mock 模式
-
-这使得前端可以**完全独立于后端**进行开发和演示。
+cc-steward 是 Electron 桌面应用，前端不走 HTTP。所有业务数据请求通过 `window.cct.api(...)` 进入 preload，再由主进程 `ipcMain.handle("cct:api")` 调用 Node.js 后端模块。这样避免 Python runtime、localhost 端口、CORS 与 Vite proxy 依赖。
 
 ---
 
@@ -123,7 +116,7 @@ cc-steward 是一个**本地桌面配置管理工具**，帮助同时使用 Clau
 
 1. 在 `src/agents/` 创建 `xxx.ts`，实现 `AgentDefinition` 接口
 2. 在 `src/agents/index.ts` 注册：`agentRegistry.register(xxxAgent)`
-3. 在 `backend/core/agents/` 创建对应 Python 类，注册到 `registry`
+3. 在 `electron/backend/agents.ts` 注册对应扫描规格
 
 无需修改任何核心代码。
 
@@ -281,31 +274,28 @@ Claude Code 的配置采用多层合并模型，cc-steward 将其可视化展示
 
 ---
 
-## 七、后端 API
+## 七、Electron IPC 后端
 
-### 7.1 端点总览
+### 7.1 IPC 能力总览
 
-后端路由在 `backend/main.py` 中注册，端口 `127.0.0.1:8765`：
+后端能力由 `electron/backend/api.ts` 注册到 `ipcMain.handle("cct:api")`：
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/meta` | GET | 工具版本、环境信息 |
-| `/agents` | GET | 已注册 Agent 列表及配置文件规格 |
-| `/files/meta` | GET | 单个配置文件元数据及内容 |
-| `/files/write` | POST | 写入配置文件 |
-| `/files/delete` | DELETE | 删除配置文件 |
-| `/sync/scan` | POST | 阶段 1：原始扫描（不转换） |
-| `/sync/plan` | POST | 阶段 2：扫描 + 转换，返回 warnings |
-| `/sync/dry-run` | POST | 阶段 3：扫描 + 转换 + 写入（dry_run=True） |
-| `/sync/execute` | POST | 阶段 4：实际写入 |
-| `/config/resolved` | GET | 合并后配置树（见 7.2） |
-| `/backup` | POST/GET | 配置备份与恢复 |
+| 能力 | 说明 |
+|------|------|
+| `health` | 健康检查 |
+| `meta` | 工具版本、环境信息 |
+| `agents.list` / `agents.files` | 已注册 Agent 列表及配置文件规格 |
+| `files.meta` / `files.read` | 单个配置文件元数据及内容 |
+| `files.write` / `files.delete` | 写入或删除配置文件 |
+| `sync.scan` / `sync.plan` | 同步扫描与转换计划 |
+| `sync.dryRun` / `sync.execute` | 预览或执行同步写入 |
+| `config.resolved` | 合并后配置树 |
+| `backup.export` | 导出配置备份 ZIP |
 
-### 7.2 /config/resolved 端点
+### 7.2 config.resolved
 
 ```
-GET /config/resolved?agent=claude&project=/path/to/project
+api.config.resolved("claude", "/path/to/project")
 ```
 
 返回内容：
@@ -314,7 +304,7 @@ GET /config/resolved?agent=claude&project=/path/to/project
 - `skills_scope`：Skills 作用域及同名覆盖检测结果
 - `agents_scope`：Agents 作用域及同名覆盖检测结果
 
-前端 `ResolvedConfigTab` 组件消费此端点，在"配置生效树"Tab 中展示。
+前端 `ResolvedConfigTab` 组件消费此 IPC 能力，在"配置生效树"Tab 中展示。
 
 ---
 
@@ -438,17 +428,10 @@ ClaudeCodex-Together/
 │   │   ├── layout/           AppShell / Sidebar / TitleBar（含 ProjectSelector）
 │   │   └── ui/               ProjectSelector, Badges, Skeleton 等
 │   └── store/                Zustand（projectPath/recentProjects 持久化）
-├── backend/
-│   ├── main.py               FastAPI 入口
-│   ├── core/
-│   │   ├── agents/           claude.py / codex.py（与前端定义镜像）
-│   │   ├── scanner.py        扫描（含 commands 目录）
-│   │   ├── converter.py      配置转换（附 warnings）
-│   │   └── writer.py         安全写入
-│   └── api/routers/          agents / files / sync（4路由）/ config / backup
 ├── electron/
-│   ├── main.ts               原生菜单 / fs.watch / context-menu IPC
-│   └── preload.ts            完整 IPC bridge（含 showContextMenu/watchPath/onFsChanged）
+│   ├── main.ts               原生菜单 / fs.watch / context-menu / cct:api IPC
+│   ├── preload.ts            完整 IPC bridge（含 showContextMenu/watchPath/onFsChanged/api）
+│   └── backend/              Node.js 本地后端（agents/files/sync/config/projects/backup）
 └── docs/
     ├── ROADMAP.md
     └── IMPLEMENTATION.md
