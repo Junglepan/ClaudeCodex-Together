@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, Menu, MenuItem, Tray, nativeImage } from 'electron'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -8,6 +8,7 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 const FRONTEND_PORT = 5174
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let watcherCleanup: (() => void) | null = null
 
 // ── IPC handlers ─────────────────────────────────────────────────────────────
@@ -283,11 +284,66 @@ function createWindow() {
   })
 }
 
+// ── System tray ──────────────────────────────────────────────────────────────
+
+function createTray() {
+  const iconPath = isDev
+    ? path.join(__dirname, '..', 'assets', 'icon.png')
+    : path.join(process.resourcesPath, 'assets', 'icon.png')
+
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 })
+  icon.setTemplateImage(true)
+
+  tray = new Tray(icon)
+  tray.setToolTip('CC Steward')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      },
+    },
+    {
+      label: '同步中心',
+      click: () => {
+        if (!mainWindow) createWindow()
+        mainWindow?.show()
+        mainWindow?.webContents.send('cct:menu-navigate', '/sync')
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        tray?.destroy()
+        tray = null
+        app.quit()
+      },
+    },
+  ])
+
+  tray.setContextMenu(contextMenu)
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show()
+    } else {
+      createWindow()
+    }
+  })
+}
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu())
   registerIpc()
+  createTray()
 
   setTimeout(createWindow, isDev ? 0 : 1500)
 

@@ -5,6 +5,58 @@
 
 ---
 
+## [1.1.2] — 2026-05-15
+
+### 改进
+- **同步引擎对齐官方 migrate-to-codex**：完整重写 `electron/backend/sync.ts`，对齐 Codex 官方迁移 skill 的转换规则
+  - Skills 目标路径修正：`.codex/skills/` → `.agents/skills/`（含子目录结构 `SKILL.md`）
+  - Skill 转换新增 `allowed-tools` → MANUAL MIGRATION REQUIRED 提示引导
+  - Commands 从"不可迁移"改为自动转换为 Codex skill（模板占位符保留 + 手动审查提示）
+  - Agent 转换新增：模型名称映射（claude-opus→gpt-5.4 等）、effort 级别映射、permissionMode→sandbox_mode、tools/disallowedTools/skills 转为 developer_instructions 提示引导
+  - 新增 Hooks 同步面：Claude hooks → `.codex/hooks.json`（含 features.codex_hooks 标志）
+  - 新增 Settings/MCP 同步面：Claude settings.json + .mcp.json → `.codex/config.toml`（含 personality="friendly"、模型映射、MCP server 转换含 bearer_token_env_var/env_http_headers 规范化）
+  - 新增 Plugin 报告面：检测到插件时标记为需手动迁移
+  - Instruction 新增 Claude-only markers 检测（/hooks、.claude/agents/、permissionMode 等），区分中立内容与需审查内容
+  - Skill support 目录复制：迁移 skill 时同步复制 `scripts/`、`references/`、`assets/` 子目录下的所有文件
+- **同步中心横向对比视图**：展开同步项改为双栏布局，左右并排对比；支持两个 Tab — 「转换对比」（Claude 源 → 转换结果）和「目标预览」（当前 Codex 文件 → 同步后内容）；新文件场景显示"文件不存在"占位 + 绿色高亮
+- **同步中心 UI 新增 MCP/Plugin 类型标签**
+- **同步中心概览/流程分离**：默认页面改为同步概览（展示同步方向、5 阶段流程图、7 类转换规则表、模型/权限映射卡片），点击「开始同步流程」进入独立的同步执行面板，支持「返回概览」
+- **同步流程分步导航**：扫描结果、转换计划、预演结果、执行报告、验证结果改为分步展示（每次只显示当前阶段），顶部步骤条显示进度并支持点击回看已完成步骤
+
+### 修复
+- **同步计划未传递覆盖模式**：`syncPlan` 前端调用未传 `replace` 参数，导致勾选覆盖模式后仍显示"有冲突"
+- **scope=全部时项目重复**：全局和项目同时扫描时同一目标路径生成重复项，新增按 target 去重（项目级优先）
+
+### 新增
+- **Post-migration 验证**（`syncValidate`）：执行同步后可一键验证目标文件 — TOML 语法检查、Skill frontmatter 必填字段、AGENTS.md 32KB 大小阈值、MCP server command PATH 可用性、hooks.json 语法
+- **迁移报告下载**（`syncReport`）：生成 Markdown 格式可保存报告，含概要统计、逐项明细（状态/类型/路径/说明）、警告与人工审查项、备份记录、验证结果
+- **同步中心验证 UI**：执行完成后显示「验证目标文件」按钮和「下载迁移报告」按钮；验证结果展示为 Stage 5 面板，逐项显示 ok/warning/error 状态
+- **vendor/migrate-to-codex/**：内置 Codex 官方迁移 skill 完整副本（SKILL.md、references、scripts），作为同步逻辑的参考实现
+
+---
+
+## [1.1.1] — 2026-05-15
+
+### 新增
+- **Skills 管理 Tab**：Agent 配置页新增「Skills」标签页，展示全局/项目 skill 列表（名称、描述、来源标签），支持展开查看完整内容、编辑（⌘S 保存）、删除（确认弹窗）
+- **Agents 管理 Tab**：Agent 配置页新增「Agents」标签页，展示子 Agent 列表（Claude `.md` / Codex `.toml`），显示 tools 元数据、格式标签，支持编辑和删除
+- **MCP Servers Tab**：Agent 配置页新增「MCP」标签页，展示已配置的 MCP 服务器列表（来源文件、command、args、环境变量），支持展开查看详情
+- **配置内容查看完整按钮**：配置文件详情页内容超过 2000 字符时，显示「查看完整内容」按钮展开全文
+- **同步中心结构化转换说明**：展开同步项查看三类检测结果 — 斜杠命令引用（红）、工具名引用（橙）、需人工确认行（黄）
+- **同步中心 diff 视图**：展开同步项可查看转换前后内容对比（红色删除/绿色新增，±3 行上下文）
+- **系统托盘**：macOS 菜单栏图标 + 右键菜单（显示窗口 / 同步中心 / 退出），单击切换窗口显示
+
+### 改进
+- **同步中心按项选择**：转换计划阶段每行新增 checkbox，支持全选/反选/单项勾选，预演和执行仅处理选中项
+- 同步后端 `analyzeContent()` 检测 Claude 斜杠命令和工具名引用，返回 `structured_warnings` 结构化字段
+- 同步后端 `syncDryRun` / `syncExecute` 支持 `item_ids` 参数，实现文件粒度的按需同步
+
+### 文档
+- ROADMAP 全部 94 项完成（0 待执行）
+- IMPLEMENTATION.md 补充完整配置定义表（Claude 13 项、Codex 11 项）、合并规则、同步机制说明
+
+---
+
 ## [1.1.0] — 2026-05-14
 
 ### 重构

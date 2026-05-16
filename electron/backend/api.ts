@@ -5,7 +5,10 @@ import { resolvedConfig } from './config'
 import { deleteFile, fileMeta, readFile, writeFile } from './files'
 import { homeDir, projectRoot } from './fsUtils'
 import { listProjects } from './projects'
-import { syncDryRun, syncExecute, syncPlan, syncScan } from './sync'
+import { listMcpServers } from './mcpServers'
+import { listSkills } from './skills'
+import { listSubagents } from './subagents'
+import { syncDryRun, syncExecute, syncPlan, syncReport, syncScan, syncValidate } from './sync'
 import pkg from '../../package.json'
 
 export interface BackendRequest {
@@ -46,8 +49,18 @@ export async function handleBackendRequest(request: BackendRequest): Promise<unk
       return syncDryRun(payload as any)
     case 'sync.execute':
       return syncExecute(payload as any)
+    case 'sync.validate':
+      return syncValidate(payload as any)
+    case 'sync.report':
+      return syncReport(payload.executeResult as any, payload.validation as any)
     case 'projects.list':
       return listProjects()
+    case 'skills.list':
+      return listSkills(payload.agentId as string, payload.project as string | undefined)
+    case 'subagents.list':
+      return listSubagents(payload.agentId as string, payload.project as string | undefined)
+    case 'mcp.list':
+      return listMcpServers(payload.agentId as string, payload.project as string | undefined)
     case 'config.resolved':
       return resolvedConfig(payload.agentId as string, payload.project as string | undefined)
     case 'backup.export':
