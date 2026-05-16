@@ -3,7 +3,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildSessionStats } from './sessionAnalytics'
-import type { SessionAgent, SessionDetail, SessionMessage, SessionSummary } from './sessionTypes'
+import type { SessionAgent, SessionDetail, SessionMessage, SessionSummary, TokenUsage } from './sessionTypes'
+import { emptyTokenUsage } from './tokenUtils'
 
 const SESSION_EXTENSIONS = new Set(['.jsonl', '.json', '.ndjson'])
 const SUMMARY_PEEK_BYTES = 4096
@@ -52,9 +53,9 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
         ? peekLines
         : Math.round(peekLines * (stat.size / scanSize))
 
-      const { toolCounts, skillNames, subagentNames } = fastScanToolStats(fullScan)
+      const scan = fastScanToolStats(fullScan)
       const scale = stat.size > SCAN_LIMIT ? stat.size / SCAN_LIMIT : 1
-      const toolCallCount = Math.round([...toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
+      const toolCallCount = Math.round([...scan.toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
 
       return {
         id: sessionId(agent, filePath),
@@ -67,9 +68,12 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
         sizeBytes: stat.size,
         nativeId: extractNativeId(filePath),
         toolCallCount,
-        topToolNames: topNKeys(toolCounts, 10),
-        topSkillNames: [...skillNames],
-        topSubagentNames: [...subagentNames],
+        topToolNames: topNKeys(scan.toolCounts, 10),
+        topSkillNames: [...scan.skillNames],
+        topSubagentNames: [...scan.subagentNames],
+        tokenUsage: scaleTokenUsage(scan.tokenUsage, scale),
+        topModelNames: topNKeys(scan.modelCounts, 5),
+        totalDurationMs: Math.round(scan.totalDurationMs * scale),
       }
     } finally {
       await fd.close()
@@ -139,6 +143,9 @@ export async function readSessionDetail(agent: SessionAgent, filePath: string, p
     topToolNames: stats.tools.map((t) => t.name),
     topSkillNames: stats.skills.map((s) => s.name),
     topSubagentNames: stats.subagents.map((s) => s.name),
+    tokenUsage: stats.tokenUsage,
+    topModelNames: stats.models.map((m) => m.name),
+    totalDurationMs: stats.totalDurationMs,
     messages,
     stats,
     rawPreview: rawText.slice(0, 4000),
@@ -170,9 +177,22 @@ function normalizeMessages(row: unknown, index: number): SessionMessage[] {
 
   if (METADATA_TYPES.has(rowType)) return []
 
+  // Extract turn_duration from system messages as invisible duration markers
+  if (rowType === 'system' && record.subtype === 'turn_duration' && typeof record.durationMs === 'number') {
+    return [{
+      id: String(record.uuid ?? `msg-${index}-dur`),
+      role: 'system',
+      content: '',
+      timestamp: typeof record.timestamp === 'string' ? record.timestamp : undefined,
+      durationMs: record.durationMs,
+    }]
+  }
+
   const msg = record.message ?? {}
   const rawContent = msg.content ?? record.content ?? record.text ?? ''
   const blocks = Array.isArray(rawContent) ? rawContent : []
+  const model = typeof msg.model === 'string' && msg.model !== '<synthetic>' ? msg.model : undefined
+  const msgTokenUsage = extractTokenUsage(msg.usage)
 
   const toolUseBlocks = blocks.filter((b: any) => b?.type === 'tool_use')
   const toolResultBlocks = blocks.filter((b: any) => b?.type === 'tool_result')
@@ -187,6 +207,8 @@ function normalizeMessages(row: unknown, index: number): SessionMessage[] {
       role: classifyRole(rowType, msgRole),
       content: textContent,
       timestamp: ts,
+      model,
+      tokenUsage: msgTokenUsage,
     })
   }
 
@@ -344,10 +366,22 @@ function sortByUpdatedDesc(a: SessionSummary, b: SessionSummary) {
   return b.updatedAt.localeCompare(a.updatedAt)
 }
 
-export function fastScanToolStats(text: string) {
+export interface FastScanResult {
+  toolCounts: Map<string, number>
+  skillNames: Set<string>
+  subagentNames: Set<string>
+  modelCounts: Map<string, number>
+  tokenUsage: TokenUsage
+  totalDurationMs: number
+}
+
+export function fastScanToolStats(text: string): FastScanResult {
   const toolCounts = new Map<string, number>()
   const skillNames = new Set<string>()
   const subagentNames = new Set<string>()
+  const modelCounts = new Map<string, number>()
+  const tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+  let totalDurationMs = 0
 
   // Claude: tool_use blocks — "type":"tool_use"..."name":"ToolName"
   for (const m of text.matchAll(/"tool_use".*?"name"\s*:\s*"([A-Za-z]\w*)"/g)) {
@@ -365,10 +399,54 @@ export function fastScanToolStats(text: string) {
   for (const m of text.matchAll(/"subagent_type"\s*:\s*"([^"]+)"/g)) {
     subagentNames.add(m[1])
   }
+  // Models: "model":"claude-xxx" on assistant messages
+  for (const m of text.matchAll(/"model"\s*:\s*"(claude-[^"]+|o[0-9]+-[^"]+|gpt-[^"]+)"/g)) {
+    modelCounts.set(m[1], (modelCounts.get(m[1]) ?? 0) + 1)
+  }
+  // Token usage: sum input_tokens / output_tokens from usage blocks
+  for (const m of text.matchAll(/"input_tokens"\s*:\s*(\d+)/g)) {
+    tokenUsage.inputTokens += Number(m[1])
+  }
+  for (const m of text.matchAll(/"output_tokens"\s*:\s*(\d+)/g)) {
+    tokenUsage.outputTokens += Number(m[1])
+  }
+  for (const m of text.matchAll(/"cache_creation_input_tokens"\s*:\s*(\d+)/g)) {
+    tokenUsage.cacheCreationTokens += Number(m[1])
+  }
+  for (const m of text.matchAll(/"cache_read_input_tokens"\s*:\s*(\d+)/g)) {
+    tokenUsage.cacheReadTokens += Number(m[1])
+  }
+  // Turn duration: "subtype":"turn_duration"..."durationMs":N
+  for (const m of text.matchAll(/"turn_duration".*?"durationMs"\s*:\s*(\d+)/g)) {
+    totalDurationMs += Number(m[1])
+  }
 
-  return { toolCounts, skillNames, subagentNames }
+  return { toolCounts, skillNames, subagentNames, modelCounts, tokenUsage, totalDurationMs }
 }
 
 function topNKeys(map: Map<string, number>, n: number): string[] {
   return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k)
+}
+
+function extractTokenUsage(usage: any): TokenUsage | undefined {
+  if (!usage || typeof usage !== 'object') return undefined
+  const input = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
+  const output = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0
+  if (input === 0 && output === 0) return undefined
+  return {
+    inputTokens: input,
+    outputTokens: output,
+    cacheCreationTokens: typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0,
+    cacheReadTokens: typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0,
+  }
+}
+
+function scaleTokenUsage(usage: TokenUsage, scale: number): TokenUsage {
+  if (scale <= 1) return usage
+  return {
+    inputTokens: Math.round(usage.inputTokens * scale),
+    outputTokens: Math.round(usage.outputTokens * scale),
+    cacheCreationTokens: Math.round(usage.cacheCreationTokens * scale),
+    cacheReadTokens: Math.round(usage.cacheReadTokens * scale),
+  }
 }

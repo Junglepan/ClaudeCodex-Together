@@ -176,6 +176,13 @@ export interface ApiMeta {
 export type ApiSessionAgent = 'claude' | 'codex'
 export type ApiSessionRole = 'user' | 'assistant' | 'system' | 'tool' | 'unknown'
 
+export interface ApiTokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
 export interface ApiSessionSummary {
   id: string
   agent: ApiSessionAgent
@@ -190,6 +197,9 @@ export interface ApiSessionSummary {
   topToolNames: string[]
   topSkillNames: string[]
   topSubagentNames: string[]
+  tokenUsage: ApiTokenUsage
+  topModelNames: string[]
+  totalDurationMs: number
 }
 
 export interface ApiSessionMessage {
@@ -202,6 +212,9 @@ export interface ApiSessionMessage {
   skillName?: string
   subagentName?: string
   subType?: 'tool_use' | 'tool_result'
+  model?: string
+  tokenUsage?: ApiTokenUsage
+  durationMs?: number
 }
 
 export interface ApiSessionStats {
@@ -214,6 +227,11 @@ export interface ApiSessionStats {
   tools: Array<{ name: string; count: number; failedCount: number }>
   skills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
   subagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  tokenUsage: ApiTokenUsage
+  models: Array<{ name: string; count: number }>
+  totalDurationMs: number
+  turnCount: number
+  avgTurnDurationMs: number
   sizeBytes: number
   updatedAt: string
 }
@@ -263,6 +281,9 @@ export interface ApiSessionOverview {
   topTools: Array<{ name: string; count: number }>
   topSkills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
   topSubagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  tokenUsage: ApiTokenUsage
+  topModels: Array<{ name: string; count: number }>
+  totalDurationMs: number
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

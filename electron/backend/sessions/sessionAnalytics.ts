@@ -6,7 +6,9 @@ import type {
   SessionStats,
   SessionSummary,
   SessionsOverviewRequest,
+  TokenUsage,
 } from './sessionTypes'
+import { emptyTokenUsage } from './tokenUtils'
 
 function emptyAgentBreakdown(): Record<SessionAgent, number> {
   return { claude: 0, codex: 0 }
@@ -26,6 +28,10 @@ export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'size
   const tools = new Map<string, { count: number; failedCount: number }>()
   const skills = new Map<string, number>()
   const subagents = new Map<string, number>()
+  const models = new Map<string, number>()
+  const tokenUsage = emptyTokenUsage()
+  let totalDurationMs = 0
+  let turnCount = 0
 
   for (const message of detail.messages) {
     if (message.toolName) {
@@ -36,6 +42,17 @@ export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'size
     }
     if (message.skillName) skills.set(message.skillName, (skills.get(message.skillName) ?? 0) + 1)
     if (message.subagentName) subagents.set(message.subagentName, (subagents.get(message.subagentName) ?? 0) + 1)
+    if (message.model) models.set(message.model, (models.get(message.model) ?? 0) + 1)
+    if (message.tokenUsage) {
+      tokenUsage.inputTokens += message.tokenUsage.inputTokens
+      tokenUsage.outputTokens += message.tokenUsage.outputTokens
+      tokenUsage.cacheCreationTokens += message.tokenUsage.cacheCreationTokens
+      tokenUsage.cacheReadTokens += message.tokenUsage.cacheReadTokens
+    }
+    if (message.durationMs) {
+      totalDurationMs += message.durationMs
+      turnCount += 1
+    }
   }
 
   return {
@@ -50,6 +67,11 @@ export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'size
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     skills: topConfidenceCounts(skills),
     subagents: topConfidenceCounts(subagents),
+    tokenUsage,
+    models: topCounts(models),
+    totalDurationMs,
+    turnCount,
+    avgTurnDurationMs: turnCount > 0 ? Math.round(totalDurationMs / turnCount) : 0,
     sizeBytes: detail.sizeBytes,
     updatedAt: detail.updatedAt,
   }
@@ -111,12 +133,21 @@ export function buildOverviewFromSummaries(summaries: SessionSummary[], request:
   const tools = new Map<string, number>()
   const skills = new Map<string, number>()
   const subagents = new Map<string, number>()
+  const models = new Map<string, number>()
+  const tokenUsage = emptyTokenUsage()
+  let totalDurationMs = 0
 
   for (const s of relevant) {
     agentBreakdown[s.agent] += 1
     for (const name of s.topToolNames) tools.set(name, (tools.get(name) ?? 0) + 1)
     for (const name of s.topSkillNames) skills.set(name, (skills.get(name) ?? 0) + 1)
     for (const name of s.topSubagentNames) subagents.set(name, (subagents.get(name) ?? 0) + 1)
+    for (const name of s.topModelNames) models.set(name, (models.get(name) ?? 0) + 1)
+    tokenUsage.inputTokens += s.tokenUsage.inputTokens
+    tokenUsage.outputTokens += s.tokenUsage.outputTokens
+    tokenUsage.cacheCreationTokens += s.tokenUsage.cacheCreationTokens
+    tokenUsage.cacheReadTokens += s.tokenUsage.cacheReadTokens
+    totalDurationMs += s.totalDurationMs
   }
 
   return {
@@ -133,5 +164,8 @@ export function buildOverviewFromSummaries(summaries: SessionSummary[], request:
     topTools: topCounts(tools).slice(0, 8),
     topSkills: topConfidenceCounts(skills).slice(0, 8),
     topSubagents: topConfidenceCounts(subagents).slice(0, 8),
+    tokenUsage,
+    topModels: topCounts(models).slice(0, 8),
+    totalDurationMs,
   }
 }

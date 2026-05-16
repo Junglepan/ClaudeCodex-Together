@@ -5,6 +5,23 @@
 
 ---
 
+## [1.3.0] — 2026-05-16
+
+### 新增
+- **Token 用量统计**：从 JSONL 的 `message.usage` 结构化提取 input/output/cache_creation/cache_read tokens，概览仪表盘展示总 Token、输入/输出 Token、Token 分布（含缓存读取/创建）卡片；右侧会话统计面板展示详细 Token 用量
+- **模型分布统计**：从 assistant 消息的 `message.model` 字段提取模型名称（claude-opus-4-7 等），概览仪表盘展示「模型分布」卡片（indigo 标签），右侧面板展示会话级模型使用
+- **Turn 耗时统计**：从 `type: "system", subtype: "turn_duration"` 行提取 `durationMs`，概览展示总耗时，右侧面板展示总耗时和平均轮次耗时
+- **Summary 层快速扫描**：`fastScanToolStats` 新增 model/token/duration regex 提取，Summary 列表不需要全量解析即可获得上述统计数据
+- **Detail 层结构化提取**：`normalizeMessages` 从 assistant 消息提取 `model`/`tokenUsage`，从 system/turn_duration 提取 `durationMs`，`buildSessionStats` 聚合为 `models`/`tokenUsage`/`turnCount`/`avgTurnDurationMs`
+
+### 改进
+- **SessionStats 扩展**：新增 `tokenUsage`、`models`、`totalDurationMs`、`turnCount`、`avgTurnDurationMs` 字段
+- **SessionSummary 扩展**：新增 `tokenUsage`、`topModelNames`、`totalDurationMs` 字段
+- **SessionOverview 扩展**：新增 `tokenUsage`、`topModels`、`totalDurationMs` 字段
+- **消除循环依赖**：`emptyTokenUsage` 提取到独立的 `tokenUtils.ts`
+
+---
+
 ## [1.2.0] — 2026-05-16
 
 ### 改进

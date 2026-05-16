@@ -53,6 +53,9 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
     topToolNames: stats.tools.map((t) => t.name),
     topSkillNames: stats.skills.map((s) => s.name),
     topSubagentNames: stats.subagents.map((s) => s.name),
+    tokenUsage: stats.tokenUsage,
+    topModelNames: stats.models.map((m) => m.name),
+    totalDurationMs: stats.totalDurationMs,
     messages,
     stats,
     rawPreview: rawText.slice(0, 4000),
@@ -72,9 +75,10 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
     const peekRows = parseRows(fullText.slice(0, 64000))
     const title = meta.title || titleFromPeek(peekRows, filePath)
 
-    const { toolCounts, skillNames, subagentNames } = fastScanToolStats(fullText)
-    const toolCallCount = [...toolCounts.values()].reduce((a, b) => a + b, 0)
-    const topToolNames = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k]) => k)
+    const scan = fastScanToolStats(fullText)
+    const toolCallCount = [...scan.toolCounts.values()].reduce((a, b) => a + b, 0)
+    const topToolNames = [...scan.toolCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k]) => k)
+    const topModelNames = [...scan.modelCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k)
 
     return {
       id: sessionId(filePath),
@@ -88,8 +92,11 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
       nativeId: meta.id,
       toolCallCount,
       topToolNames,
-      topSkillNames: [...skillNames],
-      topSubagentNames: [...subagentNames],
+      topSkillNames: [...scan.skillNames],
+      topSubagentNames: [...scan.subagentNames],
+      tokenUsage: scan.tokenUsage,
+      topModelNames,
+      totalDurationMs: scan.totalDurationMs,
     }
   } catch {
     return null
