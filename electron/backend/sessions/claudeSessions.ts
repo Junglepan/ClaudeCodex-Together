@@ -111,7 +111,6 @@ function normalizeMessage(row: unknown, index: number): SessionMessage | null {
     toolStatus: toolName ? (record.is_error || record.error ? 'error' : 'ok') : undefined,
     skillName,
     subagentName,
-    raw: row,
   }
 }
 
