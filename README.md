@@ -5,7 +5,7 @@
   <br>cc-steward
 </h1>
   <p align="center">
-    Claude Code / Codex CLI 本地配置管家<br/>
+    Claude Code / Codex CLI 本地配置、会话管家<br/>
     可视化管理、对照、同步两套 AI 编程工具的全部配置。
     <br />
     <br />
