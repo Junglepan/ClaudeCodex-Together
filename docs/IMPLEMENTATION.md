@@ -174,7 +174,7 @@ cc-steward 不再启动 Python/FastAPI 后端，也不监听 localhost 业务端
 
 后端位于 `electron/backend/sessions/`：
 
-- `claudeSessions.ts`：Claude 会话发现 — 递归扫描 `~/.claude/projects/**/*.jsonl`（跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，过滤 <200 字节文件）。轻量列表只读 stat + 前 4KB 提取标题/项目路径；详情支持分页（offset/limit）。元数据行（permission-mode、file-history-snapshot、attachment、ai-title 等 8 种）自动过滤。`tool_use`/`tool_result` content blocks 拆分为独立消息，thinking blocks 跳过。
+- `claudeSessions.ts`：Claude 会话发现 — 递归扫描 `~/.claude/projects/**/*.jsonl`（跳过 `subagents/`、`memory/`、`worktrees/`、`node_modules/` 目录，过滤 <200 字节文件）。轻量列表只读 stat + 前 1MB（`SCAN_LIMIT`）通过 `fastScanToolStats` 正则扫描提取工具/技能/子代理统计（技能从 `"name":"Skill"..."skill":"xxx"` 提取，子代理从 `"subagent_type":"xxx"` 提取）。详情支持分页（offset/limit），`normalizeMessages` 从 tool_use blocks 的 input 字段精确提取 `skillName`/`subagentName`。元数据行（permission-mode 等 8 种）自动过滤。`tool_use`/`tool_result` content blocks 拆分为独立消息，thinking blocks 跳过。
 - `codexSessions.ts`：Codex 会话发现 — 扫描 `~/.codex/sessions/`，独立解析器支持 Codex JSONL 格式（session_meta / event_msg / response_item）。`extractMetaFast` 使用 regex 提取 cwd/id/title（避免 JSON.parse 22KB+ 的 session_meta 行）。支持 function_call、function_call_output、custom_tool_call 等工具消息。
 - `sessionAnalytics.ts`：统计聚合 — `buildSessionStats`（从消息构建工具/技能/子代理统计）、`aggregateProjectsFromSummaries`/`buildOverviewFromSummaries`（从轻量 Summary 聚合，不需要读取全部消息）。
 - `sessionSearch.ts`：全文搜索 — 遍历会话消息查找匹配，支持角色和工具名过滤，`maxResults` 上限 100，单文件 2MB 跳过。

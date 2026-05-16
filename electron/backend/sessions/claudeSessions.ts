@@ -194,6 +194,9 @@ function normalizeMessages(row: unknown, index: number): SessionMessage[] {
     const block = toolUseBlocks[i]
     const content = formatToolInput(block)
     if (!content) continue
+    const input = block.input ?? {}
+    const skillName = block.name === 'Skill' && typeof input.skill === 'string' ? input.skill : undefined
+    const subagentName = block.name === 'Agent' && typeof input.subagent_type === 'string' ? input.subagent_type : undefined
     results.push({
       id: String(block.id ?? `msg-${index}-tu-${i}`),
       role: 'tool',
@@ -202,6 +205,8 @@ function normalizeMessages(row: unknown, index: number): SessionMessage[] {
       toolName: block.name,
       toolStatus: 'ok',
       subType: 'tool_use',
+      skillName,
+      subagentName,
     })
   }
 
@@ -236,8 +241,6 @@ function toSingleMessage(record: Record<string, any>, rawContent: unknown, block
 
   if (!content.trim()) return null
 
-  const skillName = inferLabel(content, /(?:skill|used skill)[:\s]+([A-Za-z0-9_.-]+)/i)
-  const subagentName = inferLabel(content, /(?:subagent|agent)[:\s]+([A-Za-z0-9_.-]+)/i)
   const toolName = record.toolName ?? record.tool_name ?? record.name
   return {
     id: String(record.uuid ?? record.id ?? `msg-${index}`),
@@ -246,8 +249,6 @@ function toSingleMessage(record: Record<string, any>, rawContent: unknown, block
     timestamp: typeof record.timestamp === 'string' ? record.timestamp : undefined,
     toolName: typeof toolName === 'string' ? toolName : undefined,
     toolStatus: toolName ? (record.is_error || record.error ? 'error' : 'ok') : undefined,
-    skillName,
-    subagentName,
   }
 }
 
@@ -286,11 +287,6 @@ function stringifyContent(value: unknown): string {
   if (Array.isArray(value)) return extractBlocksText(value)
   if (value == null) return ''
   return JSON.stringify(value)
-}
-
-function inferLabel(content: string, pattern: RegExp) {
-  const match = content.match(pattern)
-  return match?.[1]
 }
 
 function firstString(rows: unknown[], keys: string[]) {
@@ -353,16 +349,20 @@ export function fastScanToolStats(text: string) {
   const skillNames = new Set<string>()
   const subagentNames = new Set<string>()
 
+  // Claude: tool_use blocks — "type":"tool_use"..."name":"ToolName"
   for (const m of text.matchAll(/"tool_use".*?"name"\s*:\s*"([A-Za-z]\w*)"/g)) {
     toolCounts.set(m[1], (toolCounts.get(m[1]) ?? 0) + 1)
   }
+  // Codex: function_call / custom_tool_call blocks
   for (const m of text.matchAll(/"(?:function_call|custom_tool_call)"(?!_output).*?"name"\s*:\s*"([A-Za-z]\w*)"/g)) {
     toolCounts.set(m[1], (toolCounts.get(m[1]) ?? 0) + 1)
   }
-  for (const m of text.matchAll(/(?:Skill|Used Skill)[:\s]+([A-Za-z0-9_.-]+)/gi)) {
+  // Skills: Skill tool call with "skill":"name" in input
+  for (const m of text.matchAll(/"name"\s*:\s*"Skill".*?"skill"\s*:\s*"([^"]+)"/g)) {
     skillNames.add(m[1])
   }
-  for (const m of text.matchAll(/(?:subagent|sub-agent)[:\s]+([A-Za-z0-9_.-]+)/gi)) {
+  // Subagents: Agent tool call with "subagent_type":"name" in input
+  for (const m of text.matchAll(/"subagent_type"\s*:\s*"([^"]+)"/g)) {
     subagentNames.add(m[1])
   }
 

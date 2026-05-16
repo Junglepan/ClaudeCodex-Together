@@ -24,6 +24,8 @@
 - **空消息过滤**：Claude JSONL 元数据行（permission-mode、file-history-snapshot、attachment、ai-title、last-prompt、queue-operation、summary、result）不再显示为空消息
 - **工具消息拆分**：`tool_use` 和 `tool_result` content blocks 现在拆分为独立消息，分别以蓝色（调用）和琥珀色（结果）样式展示；错误结果显示红色
 - **thinking block 过滤**：AI 思考块不再显示在对话中
+- **技能/子代理名称误识别**：修复 skill 和 subagent 统计使用宽泛正则匹配自然语言（导致出现 "should"、"to"、"based" 等垃圾名称）；改为从 JSON 结构化字段（`"skill":"name"`、`"subagent_type":"name"`）精确提取
+- **工具统计概览归零**：修复 `fastScanToolStats` 正则扫描策略，Summary 层现在正确携带工具/技能/子代理数据，Overview 仪表盘不再全部为 0
 
 ### 新增
 - **Codex 会话解析器**（`codexSessions.ts`）：完整支持 Codex JSONL 格式（session_meta / event_msg / response_item），正确提取项目路径和会话 ID

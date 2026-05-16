@@ -64,7 +64,7 @@ test('detail normalizes messages and tool statistics', async () => {
     { type: 'user', message: { content: 'Use Bash' }, timestamp: '2026-05-16T01:00:00.000Z', cwd: '/tmp/proj-a' },
     { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'pwd' } }] }, timestamp: '2026-05-16T01:00:01.000Z', cwd: '/tmp/proj-a' },
     { type: 'tool_result', toolName: 'Bash', content: 'boom', is_error: true, timestamp: '2026-05-16T01:00:02.000Z', cwd: '/tmp/proj-a' },
-    { type: 'assistant', message: { content: 'Used Skill: test-writer' }, timestamp: '2026-05-16T01:00:03.000Z', cwd: '/tmp/proj-a' },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu-skill-1', name: 'Skill', input: { skill: 'test-writer' } }] }, timestamp: '2026-05-16T01:00:03.000Z', cwd: '/tmp/proj-a' },
   ])
   const [summary] = await listSessions({ scope: 'all' }, { homeDir: home })
 
@@ -74,9 +74,9 @@ test('detail normalizes messages and tool statistics', async () => {
   assert.equal(detail.messages[1].role, 'tool')
   assert.equal(detail.messages[1].toolName, 'Bash')
   assert.equal(detail.stats.messageCount, 4)
-  assert.equal(detail.stats.toolCallCount, 2)
+  assert.equal(detail.stats.toolCallCount, 3)
   assert.equal(detail.stats.failedToolCallCount, 1)
-  assert.deepEqual(detail.stats.tools, [{ name: 'Bash', count: 2, failedCount: 1 }])
+  assert.deepEqual(detail.stats.tools, [{ name: 'Bash', count: 2, failedCount: 1 }, { name: 'Skill', count: 1, failedCount: 0 }])
   assert.deepEqual(detail.stats.skills, [{ name: 'test-writer', count: 1, confidence: 'inferred' }])
   assert.equal('raw' in detail.messages[0], false)
   assert.equal((detail.rawPreview ?? '').length > 0, true)
