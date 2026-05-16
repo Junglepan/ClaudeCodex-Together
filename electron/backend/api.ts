@@ -6,6 +6,15 @@ import { deleteFile, fileMeta, readFile, writeFile } from './files'
 import { homeDir, projectRoot } from './fsUtils'
 import { listProjects } from './projects'
 import { listMcpServers } from './mcpServers'
+import {
+  deleteSession,
+  getSessionDetail,
+  getSessionsOverview,
+  listSessionProjects,
+  listSessions,
+  searchSessions,
+} from './sessions'
+import { sessionWatchPaths } from './sessions/sessionWatchPaths'
 import { listSkills } from './skills'
 import { listSubagents } from './subagents'
 import { syncDryRun, syncExecute, syncPlan, syncReport, syncScan, syncValidate } from './sync'
@@ -18,6 +27,9 @@ export interface BackendRequest {
 
 export async function handleBackendRequest(request: BackendRequest): Promise<unknown> {
   const payload = request.payload ?? {}
+  const sessionOptions = {
+    homeDir: typeof payload.home_path === 'string' ? payload.home_path : undefined,
+  }
   switch (request.endpoint) {
     case 'health':
       return { status: 'ok', version: pkg.version }
@@ -61,6 +73,20 @@ export async function handleBackendRequest(request: BackendRequest): Promise<unk
       return listSubagents(payload.agentId as string, payload.project as string | undefined)
     case 'mcp.list':
       return listMcpServers(payload.agentId as string, payload.project as string | undefined)
+    case 'sessions.list':
+      return listSessions(payload as any, sessionOptions)
+    case 'sessions.detail':
+      return getSessionDetail(payload as any, sessionOptions)
+    case 'sessions.projects':
+      return listSessionProjects(payload as any, sessionOptions)
+    case 'sessions.overview':
+      return getSessionsOverview(payload as any, sessionOptions)
+    case 'sessions.search':
+      return searchSessions(payload as any, sessionOptions)
+    case 'sessions.delete':
+      return deleteSession(payload as any, sessionOptions)
+    case 'sessions.watchPaths':
+      return sessionWatchPaths(sessionOptions)
     case 'config.resolved':
       return resolvedConfig(payload.agentId as string, payload.project as string | undefined)
     case 'backup.export':

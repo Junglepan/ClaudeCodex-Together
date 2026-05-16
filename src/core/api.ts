@@ -173,6 +173,86 @@ export interface ApiMeta {
   python_version: string
 }
 
+export type ApiSessionAgent = 'claude' | 'codex'
+export type ApiSessionRole = 'user' | 'assistant' | 'system' | 'tool' | 'unknown'
+
+export interface ApiSessionSummary {
+  id: string
+  agent: ApiSessionAgent
+  projectPath: string | null
+  title: string
+  path: string
+  messageCount: number
+  updatedAt: string
+  sizeBytes: number
+}
+
+export interface ApiSessionMessage {
+  id: string
+  role: ApiSessionRole
+  content: string
+  timestamp?: string
+  toolName?: string
+  toolStatus?: 'ok' | 'error' | 'unknown'
+  skillName?: string
+  subagentName?: string
+  raw?: unknown
+}
+
+export interface ApiSessionStats {
+  messageCount: number
+  userMessageCount: number
+  assistantMessageCount: number
+  toolMessageCount: number
+  toolCallCount: number
+  failedToolCallCount: number
+  tools: Array<{ name: string; count: number; failedCount: number }>
+  skills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  subagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  sizeBytes: number
+  updatedAt: string
+}
+
+export interface ApiSessionDetail extends ApiSessionSummary {
+  messages: ApiSessionMessage[]
+  stats: ApiSessionStats
+  rawPreview?: string
+}
+
+export interface ApiSessionSearchHit {
+  session: ApiSessionSummary
+  messageId: string
+  role: ApiSessionRole
+  excerpt: string
+}
+
+export interface ApiProjectSessionOverview {
+  projectPath: string | null
+  sessionCount: number
+  messageCount: number
+  toolCallCount: number
+  lastActiveAt: string | null
+  totalSizeBytes: number
+  agentBreakdown: Record<ApiSessionAgent, number>
+  topTools: Array<{ name: string; count: number }>
+}
+
+export interface ApiSessionOverview {
+  scope: 'user' | 'project'
+  projectPath?: string
+  totalSessions: number
+  totalMessages: number
+  totalToolCalls: number
+  failedToolCalls: number
+  totalSizeBytes: number
+  recentSessionCount: number
+  agentBreakdown: Record<ApiSessionAgent, number>
+  topProjects: ApiProjectSessionOverview[]
+  topTools: Array<{ name: string; count: number }>
+  topSkills: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+  topSubagents: Array<{ name: string; count: number; confidence: 'exact' | 'inferred' }>
+}
+
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -239,6 +319,34 @@ export const api = {
   mcp: {
     list: (agentId: string, projectPath?: string) =>
       request<ApiMcpServerItem[]>('mcp.list', { agentId, project: projectPath }),
+  },
+
+  sessions: {
+    list: (params: { agent?: ApiSessionAgent; projectPath?: string; scope: 'current-project' | 'all' }) =>
+      request<ApiSessionSummary[]>('sessions.list', params),
+
+    detail: (agent: ApiSessionAgent, sessionId: string) =>
+      request<ApiSessionDetail>('sessions.detail', { agent, sessionId }),
+
+    projects: (params: { agent?: ApiSessionAgent; projectPath?: string; scope: 'current-project' | 'all' }) =>
+      request<ApiProjectSessionOverview[]>('sessions.projects', params),
+
+    overview: (params: { agent?: ApiSessionAgent; projectPath?: string; scope: 'user' | 'project' }) =>
+      request<ApiSessionOverview>('sessions.overview', params),
+
+    search: (params: {
+      agent?: ApiSessionAgent
+      projectPath?: string
+      scope: 'current-project' | 'all'
+      query: string
+      role?: ApiSessionRole
+      toolName?: string
+    }) => request<ApiSessionSearchHit[]>('sessions.search', params),
+
+    delete: (agent: ApiSessionAgent, sessionId: string) =>
+      request<{ deleted: true; originalPath: string; trashPath: string }>('sessions.delete', { agent, sessionId }),
+
+    watchPaths: () => request<string[]>('sessions.watchPaths'),
   },
 
   config: {
