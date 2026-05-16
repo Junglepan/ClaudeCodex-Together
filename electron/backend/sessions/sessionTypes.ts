@@ -59,10 +59,12 @@ export interface SessionSummary {
   nativeId?: string
   toolCallCount: number
   topToolNames: string[]
+  topTools: Array<{ name: string; count: number }>
   topSkillNames: string[]
   topSubagentNames: string[]
   tokenUsage: TokenUsage
   topModelNames: string[]
+  topModels: Array<{ name: string; count: number }>
   totalDurationMs: number
 }
 

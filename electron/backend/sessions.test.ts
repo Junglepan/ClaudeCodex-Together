@@ -101,6 +101,47 @@ test('overview aggregates project and user metrics and watch paths are scoped', 
   assert.ok(watchPaths.some((watchPath) => watchPath.endsWith(path.join('.codex', 'sessions'))))
 })
 
+test('codex overview aggregates token counts, tools, and models from current JSONL records', async () => {
+  const home = makeTmp()
+  writeJsonl(path.join(home, '.codex', 'sessions', '2026', '05', '16', 'codex-current.jsonl'), [
+    { timestamp: '2026-05-16T02:00:00.000Z', type: 'session_meta', payload: { id: 'codex-current', cwd: '/tmp/proj-a' } },
+    { timestamp: '2026-05-16T02:00:01.000Z', type: 'turn_context', payload: { cwd: '/tmp/proj-a', model: 'gpt-5.5' } },
+    { timestamp: '2026-05-16T02:00:02.000Z', type: 'event_msg', payload: { type: 'user_message', message: 'Please inspect the repository' } },
+    { timestamp: '2026-05-16T02:00:03.000Z', type: 'response_item', payload: { type: 'function_call', name: 'exec_command', call_id: 'call-1', arguments: '{"cmd":"pwd"}' } },
+    { timestamp: '2026-05-16T02:00:04.000Z', type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-1', output: '/tmp/proj-a' } },
+    { timestamp: '2026-05-16T02:00:05.000Z', type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 100, output_tokens: 20, cached_input_tokens: 80, total_tokens: 120 } } } },
+    { timestamp: '2026-05-16T02:00:06.000Z', type: 'turn_context', payload: { cwd: '/tmp/proj-a', model: 'gpt-5.5' } },
+    { timestamp: '2026-05-16T02:00:07.000Z', type: 'event_msg', payload: { type: 'agent_message', message: 'I checked it.' } },
+    { timestamp: '2026-05-16T02:00:08.000Z', type: 'response_item', payload: { type: 'custom_tool_call', name: 'apply_patch', call_id: 'call-2', input: 'patch' } },
+    { timestamp: '2026-05-16T02:00:09.000Z', type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'call-2', output: 'ok' } },
+    { timestamp: '2026-05-16T02:00:10.000Z', type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 40, output_tokens: 10, cached_input_tokens: 30, reasoning_output_tokens: 5, total_tokens: 55 } } } },
+  ])
+
+  const [summary] = await listSessions({ agent: 'codex', scope: 'all' }, { homeDir: home })
+  const overview = await getSessionsOverview({ agent: 'codex', scope: 'user' }, { homeDir: home })
+
+  assert.equal(summary.messageCount, 6)
+  assert.equal(summary.toolCallCount, 2)
+  assert.deepEqual(summary.topToolNames, ['apply_patch', 'exec_command'])
+  assert.deepEqual(summary.topModelNames, ['gpt-5.5'])
+  assert.deepEqual(summary.tokenUsage, {
+    inputTokens: 140,
+    outputTokens: 30,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 110,
+  })
+  assert.equal(overview.totalMessages, 6)
+  assert.equal(overview.totalToolCalls, 2)
+  assert.deepEqual(overview.topTools, [{ name: 'apply_patch', count: 1 }, { name: 'exec_command', count: 1 }])
+  assert.deepEqual(overview.topModels, [{ name: 'gpt-5.5', count: 2 }])
+  assert.deepEqual(overview.tokenUsage, {
+    inputTokens: 140,
+    outputTokens: 30,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 110,
+  })
+})
+
 test('search returns message hits and supports role and tool filters', async () => {
   const home = makeTmp()
   writeJsonl(path.join(home, '.claude', 'projects', 'proj-a', 'session.jsonl'), [

@@ -6,8 +6,6 @@ import { buildSessionStats } from './sessionAnalytics'
 import { collectSessionFiles, fastScanToolStats } from './claudeSessions'
 import type { SessionDetail, SessionMessage, SessionSummary } from './sessionTypes'
 
-const SUMMARY_PEEK_BYTES = 8192
-
 export function codexSessionRoot(homeDir = os.homedir()) {
   return path.join(homeDir, '.codex', 'sessions')
 }
@@ -51,10 +49,12 @@ export async function readCodexSession(filePath: string, pagination?: { offset?:
     nativeId: meta.id,
     toolCallCount: stats.toolCallCount,
     topToolNames: stats.tools.map((t) => t.name),
+    topTools: stats.tools.map((t) => ({ name: t.name, count: t.count })),
     topSkillNames: stats.skills.map((s) => s.name),
     topSubagentNames: stats.subagents.map((s) => s.name),
     tokenUsage: stats.tokenUsage,
     topModelNames: stats.models.map((m) => m.name),
+    topModels: stats.models,
     totalDurationMs: stats.totalDurationMs,
     messages,
     stats,
@@ -69,16 +69,17 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
     const fullText = await fs.readFile(filePath, 'utf8').catch(() => '')
     if (!fullText) return null
 
+    const rows = parseRows(fullText)
     const meta = extractMetaFast(fullText)
-    const messageCount = countConversationRows(fullText)
+    const messageCount = countConversationRows(rows)
 
-    const peekRows = parseRows(fullText.slice(0, 64000))
+    const peekRows = rows.slice(0, 200)
     const title = meta.title || titleFromPeek(peekRows, filePath)
 
     const scan = fastScanToolStats(fullText)
     const toolCallCount = [...scan.toolCounts.values()].reduce((a, b) => a + b, 0)
-    const topToolNames = [...scan.toolCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k]) => k)
-    const topModelNames = [...scan.modelCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k)
+    const topTools = topCounts(scan.toolCounts, 10)
+    const topModels = topCounts(scan.modelCounts, 5)
 
     return {
       id: sessionId(filePath),
@@ -91,11 +92,13 @@ async function readCodexSummary(filePath: string): Promise<SessionSummary | null
       sizeBytes: stat.size,
       nativeId: meta.id,
       toolCallCount,
-      topToolNames,
+      topToolNames: topTools.map((t) => t.name),
+      topTools,
       topSkillNames: [...scan.skillNames],
       topSubagentNames: [...scan.subagentNames],
       tokenUsage: scan.tokenUsage,
-      topModelNames,
+      topModelNames: topModels.map((m) => m.name),
+      topModels,
       totalDurationMs: scan.totalDurationMs,
     }
   } catch {
@@ -300,13 +303,40 @@ function titleFromPeek(rows: any[], filePath: string): string {
   return path.basename(filePath)
 }
 
-function countConversationRows(text: string): number {
+function countConversationRows(rows: any[]): number {
   let count = 0
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    if (line.includes('"user_message"') || line.includes('"agent_message"') || line.includes('"function_call"')) count++
+  for (const row of rows) {
+    const p = row?.payload ?? {}
+    if (row?.type === 'event_msg' && (p.type === 'user_message' || p.type === 'agent_message')) {
+      count++
+      continue
+    }
+    if (row?.type !== 'response_item') continue
+    if (p.type === 'message') {
+      const role = p.role
+      if (role === 'user' || role === 'assistant') {
+        const content = extractResponseContent(p.content)
+        if (content.trim()) count++
+      }
+      continue
+    }
+    if (
+      p.type === 'function_call'
+      || p.type === 'function_call_output'
+      || p.type === 'custom_tool_call'
+      || p.type === 'custom_tool_call_output'
+    ) {
+      count++
+    }
   }
   return count
+}
+
+function topCounts(map: Map<string, number>, n: number): Array<{ name: string; count: number }> {
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, n)
 }
 
 function lastTimestamp(rows: any[]): string | undefined {

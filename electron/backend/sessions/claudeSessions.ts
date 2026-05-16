@@ -56,6 +56,8 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
       const scan = fastScanToolStats(fullScan)
       const scale = stat.size > SCAN_LIMIT ? stat.size / SCAN_LIMIT : 1
       const toolCallCount = Math.round([...scan.toolCounts.values()].reduce((a, b) => a + b, 0) * scale)
+      const topTools = topCounts(scan.toolCounts, 10, scale)
+      const topModels = topCounts(scan.modelCounts, 5, scale)
 
       return {
         id: sessionId(agent, filePath),
@@ -68,11 +70,13 @@ async function readSessionSummary(agent: SessionAgent, filePath: string): Promis
         sizeBytes: stat.size,
         nativeId: extractNativeId(filePath),
         toolCallCount,
-        topToolNames: topNKeys(scan.toolCounts, 10),
+        topToolNames: topTools.map((t) => t.name),
+        topTools,
         topSkillNames: [...scan.skillNames],
         topSubagentNames: [...scan.subagentNames],
         tokenUsage: scaleTokenUsage(scan.tokenUsage, scale),
-        topModelNames: topNKeys(scan.modelCounts, 5),
+        topModelNames: topModels.map((m) => m.name),
+        topModels,
         totalDurationMs: Math.round(scan.totalDurationMs * scale),
       }
     } finally {
@@ -141,10 +145,12 @@ export async function readSessionDetail(agent: SessionAgent, filePath: string, p
     nativeId: extractNativeId(filePath),
     toolCallCount: stats.toolCallCount,
     topToolNames: stats.tools.map((t) => t.name),
+    topTools: stats.tools.map((t) => ({ name: t.name, count: t.count })),
     topSkillNames: stats.skills.map((s) => s.name),
     topSubagentNames: stats.subagents.map((s) => s.name),
     tokenUsage: stats.tokenUsage,
     topModelNames: stats.models.map((m) => m.name),
+    topModels: stats.models,
     totalDurationMs: stats.totalDurationMs,
     messages,
     stats,
@@ -416,8 +422,25 @@ export function fastScanToolStats(text: string): FastScanResult {
   const codexTotalRe = /"total_token_usage".*?"input_tokens"\s*:\s*(\d+).*?"output_tokens"\s*:\s*(\d+)/
   let codexLastInput = 0
   let codexLastOutput = 0
+  let codexSawIncrementalUsage = false
 
   for (const line of text.split('\n')) {
+    if (isCodex && line.includes('last_token_usage')) {
+      const row = parseJson(line)
+      const usage = row?.payload?.info?.last_token_usage
+      if (usage && typeof usage === 'object') {
+        tokenUsage.inputTokens += typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
+        tokenUsage.outputTokens += typeof usage.output_tokens === 'number' ? usage.output_tokens : 0
+        tokenUsage.cacheCreationTokens += typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0
+        tokenUsage.cacheReadTokens += typeof usage.cached_input_tokens === 'number'
+          ? usage.cached_input_tokens
+          : typeof usage.cache_read_input_tokens === 'number'
+            ? usage.cache_read_input_tokens
+            : 0
+        codexSawIncrementalUsage = true
+      }
+      continue
+    }
     if (isCodex && line.includes('total_token_usage')) {
       const m = line.match(codexTotalRe)
       if (m) { codexLastInput = Number(m[1]); codexLastOutput = Number(m[2]) }
@@ -434,7 +457,7 @@ export function fastScanToolStats(text: string): FastScanResult {
     const durMatch = line.match(durationRe)
     if (durMatch) totalDurationMs += Number(durMatch[1])
   }
-  if (isCodex) {
+  if (isCodex && !codexSawIncrementalUsage) {
     tokenUsage.inputTokens = codexLastInput
     tokenUsage.outputTokens = codexLastOutput
   }
@@ -442,8 +465,11 @@ export function fastScanToolStats(text: string): FastScanResult {
   return { toolCounts, skillNames, subagentNames, modelCounts, tokenUsage, totalDurationMs }
 }
 
-function topNKeys(map: Map<string, number>, n: number): string[] {
-  return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k)
+function topCounts(map: Map<string, number>, n: number, scale = 1): Array<{ name: string; count: number }> {
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count: Math.round(count * scale) }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, n)
 }
 
 function extractTokenUsage(usage: any): TokenUsage | undefined {

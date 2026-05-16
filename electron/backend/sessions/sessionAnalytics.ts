@@ -24,6 +24,10 @@ function topConfidenceCounts(counts: Map<string, number>, confidence: 'exact' | 
   return topCounts(counts).map((item) => ({ ...item, confidence }))
 }
 
+function addCount(target: Map<string, number>, name: string, count: number) {
+  target.set(name, (target.get(name) ?? 0) + count)
+}
+
 export function buildSessionStats(detail: Pick<SessionDetail, 'messages' | 'sizeBytes' | 'updatedAt'>): SessionStats {
   const tools = new Map<string, { count: number; failedCount: number }>()
   const skills = new Map<string, number>()
@@ -110,9 +114,7 @@ export function aggregateProjectsFromSummaries(summaries: SessionSummary[]): Pro
     projects.set(key, current)
 
     const tools = projectTools.get(key) ?? new Map<string, number>()
-    for (const name of summary.topToolNames) {
-      tools.set(name, (tools.get(name) ?? 0) + 1)
-    }
+    for (const tool of summary.topTools) addCount(tools, tool.name, tool.count)
     projectTools.set(key, tools)
   }
   for (const [key, project] of projects.entries()) {
@@ -139,10 +141,10 @@ export function buildOverviewFromSummaries(summaries: SessionSummary[], request:
 
   for (const s of relevant) {
     agentBreakdown[s.agent] += 1
-    for (const name of s.topToolNames) tools.set(name, (tools.get(name) ?? 0) + 1)
+    for (const tool of s.topTools) addCount(tools, tool.name, tool.count)
     for (const name of s.topSkillNames) skills.set(name, (skills.get(name) ?? 0) + 1)
     for (const name of s.topSubagentNames) subagents.set(name, (subagents.get(name) ?? 0) + 1)
-    for (const name of s.topModelNames) models.set(name, (models.get(name) ?? 0) + 1)
+    for (const model of s.topModels) addCount(models, model.name, model.count)
     tokenUsage.inputTokens += s.tokenUsage.inputTokens
     tokenUsage.outputTokens += s.tokenUsage.outputTokens
     tokenUsage.cacheCreationTokens += s.tokenUsage.cacheCreationTokens

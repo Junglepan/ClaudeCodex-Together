@@ -195,10 +195,12 @@ export interface ApiSessionSummary {
   nativeId?: string
   toolCallCount: number
   topToolNames: string[]
+  topTools: Array<{ name: string; count: number }>
   topSkillNames: string[]
   topSubagentNames: string[]
   tokenUsage: ApiTokenUsage
   topModelNames: string[]
+  topModels: Array<{ name: string; count: number }>
   totalDurationMs: number
 }
 
