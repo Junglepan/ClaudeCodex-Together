@@ -3,11 +3,11 @@ import type { ModuleDefinition } from '@/modules/types'
 import { SessionsPage } from './SessionsPage'
 
 function ClaudeSessionsPage() {
-  return SessionsPage({ agentId: 'claude' })
+  return <SessionsPage agentId="claude" />
 }
 
 function CodexSessionsPage() {
-  return SessionsPage({ agentId: 'codex' })
+  return <SessionsPage agentId="codex" />
 }
 
 export const claudeSessionsModule: ModuleDefinition = {

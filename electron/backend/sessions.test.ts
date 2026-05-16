@@ -76,6 +76,8 @@ test('detail normalizes messages and tool statistics', async () => {
   assert.equal(detail.stats.failedToolCallCount, 1)
   assert.deepEqual(detail.stats.tools, [{ name: 'Bash', count: 2, failedCount: 1 }])
   assert.deepEqual(detail.stats.skills, [{ name: 'test-writer', count: 1, confidence: 'inferred' }])
+  assert.equal('raw' in detail.messages[0], false)
+  assert.equal((detail.rawPreview ?? '').length > 0, true)
 })
 
 test('overview aggregates project and user metrics and watch paths are scoped', async () => {

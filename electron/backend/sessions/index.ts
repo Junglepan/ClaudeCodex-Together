@@ -57,5 +57,7 @@ export async function deleteSession(request: DeleteSessionRequest, options: Sess
 
 async function listSessionDetails(request: ListSessionsRequest, options: SessionRuntimeOptions) {
   const sessions = await listSessions(request, options)
-  return Promise.all(sessions.map((session) => getSessionDetail({ agent: session.agent, sessionId: session.id }, options)))
+  return Promise.all(sessions.map((session) =>
+    session.agent === 'claude' ? readClaudeSession(session.path) : readCodexSession(session.path),
+  ))
 }
