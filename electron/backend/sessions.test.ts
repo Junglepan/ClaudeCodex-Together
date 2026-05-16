@@ -29,15 +29,17 @@ function exists(filePath: string) {
 function seedSessions() {
   const home = makeTmp()
   writeJsonl(path.join(home, '.claude', 'projects', 'proj-a', 'claude-1.jsonl'), [
-    { type: 'user', message: { content: 'Hello Claude' }, timestamp: '2026-05-16T01:00:00.000Z', cwd: '/tmp/proj-a' },
-    { type: 'assistant', message: { content: 'Hi from Claude' }, timestamp: '2026-05-16T01:00:01.000Z', cwd: '/tmp/proj-a' },
+    { type: 'user', message: { content: 'Hello Claude, I need help with my project' }, timestamp: '2026-05-16T01:00:00.000Z', cwd: '/tmp/proj-a' },
+    { type: 'assistant', message: { content: 'Hi! I would be happy to help you with your project. What do you need?' }, timestamp: '2026-05-16T01:00:01.000Z', cwd: '/tmp/proj-a' },
   ])
   writeJsonl(path.join(home, '.codex', 'sessions', '2026', '05', '16', 'codex-1.jsonl'), [
-    { role: 'user', content: 'Hello Codex', timestamp: '2026-05-16T02:00:00.000Z', cwd: '/tmp/proj-a' },
-    { role: 'assistant', content: 'Hi from Codex', timestamp: '2026-05-16T02:00:01.000Z', cwd: '/tmp/proj-a' },
+    { timestamp: '2026-05-16T02:00:00.000Z', type: 'session_meta', payload: { id: 'codex-uuid-1', cwd: '/tmp/proj-a', model: 'o4-mini' } },
+    { timestamp: '2026-05-16T02:00:00.000Z', type: 'event_msg', payload: { type: 'user_message', message: 'Hello Codex, please help me refactor this module' } },
+    { timestamp: '2026-05-16T02:00:01.000Z', type: 'event_msg', payload: { type: 'agent_message', message: 'Sure, I will analyze the module structure and suggest improvements' } },
   ])
   writeJsonl(path.join(home, '.claude', 'projects', 'proj-b', 'claude-2.jsonl'), [
-    { type: 'user', message: { content: 'Other project' }, timestamp: '2026-05-16T03:00:00.000Z', cwd: '/tmp/proj-b' },
+    { type: 'user', message: { content: 'Other project needs some work on the authentication flow' }, timestamp: '2026-05-16T03:00:00.000Z', cwd: '/tmp/proj-b' },
+    { type: 'assistant', message: { content: 'I will review the authentication flow and suggest changes' }, timestamp: '2026-05-16T03:00:01.000Z', cwd: '/tmp/proj-b' },
   ])
   return home
 }

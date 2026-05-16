@@ -1,15 +1,26 @@
 import type { SearchSessionsRequest, SessionRuntimeOptions, SessionSearchHit } from './sessionTypes'
-import { getSessionDetail, listSessions } from './index'
+import { readClaudeSession } from './claudeSessions'
+import { readCodexSession } from './codexSessions'
+import { listSessions } from './index'
+
+const DEFAULT_MAX_RESULTS = 100
+const MAX_FILE_BYTES = 2 * 1024 * 1024
 
 export async function searchSessionMessages(request: SearchSessionsRequest, options: SessionRuntimeOptions = {}): Promise<SessionSearchHit[]> {
   const query = request.query.trim().toLowerCase()
   if (!query) return []
+  const maxResults = request.maxResults ?? DEFAULT_MAX_RESULTS
   const sessions = await listSessions(request, options)
   const hits: SessionSearchHit[] = []
 
   for (const session of sessions) {
-    const detail = await getSessionDetail({ agent: session.agent, sessionId: session.id }, options)
+    if (hits.length >= maxResults) break
+    if (session.sizeBytes > MAX_FILE_BYTES) continue
+    const detail = session.agent === 'claude'
+      ? await readClaudeSession(session.path)
+      : await readCodexSession(session.path)
     for (const message of detail.messages) {
+      if (hits.length >= maxResults) break
       if (request.role && message.role !== request.role) continue
       if (request.toolName && message.toolName !== request.toolName) continue
       const index = message.content.toLowerCase().indexOf(query)

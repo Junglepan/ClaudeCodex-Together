@@ -185,6 +185,7 @@ export interface ApiSessionSummary {
   messageCount: number
   updatedAt: string
   sizeBytes: number
+  nativeId?: string
 }
 
 export interface ApiSessionMessage {
@@ -196,7 +197,7 @@ export interface ApiSessionMessage {
   toolStatus?: 'ok' | 'error' | 'unknown'
   skillName?: string
   subagentName?: string
-  raw?: unknown
+  subType?: 'tool_use' | 'tool_result'
 }
 
 export interface ApiSessionStats {
@@ -213,10 +214,17 @@ export interface ApiSessionStats {
   updatedAt: string
 }
 
+export interface ApiSessionPagination {
+  offset: number
+  limit: number
+  total: number
+}
+
 export interface ApiSessionDetail extends ApiSessionSummary {
   messages: ApiSessionMessage[]
   stats: ApiSessionStats
   rawPreview?: string
+  pagination?: ApiSessionPagination
 }
 
 export interface ApiSessionSearchHit {
@@ -325,8 +333,8 @@ export const api = {
     list: (params: { agent?: ApiSessionAgent; projectPath?: string; scope: 'current-project' | 'all' }) =>
       request<ApiSessionSummary[]>('sessions.list', params),
 
-    detail: (agent: ApiSessionAgent, sessionId: string) =>
-      request<ApiSessionDetail>('sessions.detail', { agent, sessionId }),
+    detail: (agent: ApiSessionAgent, sessionId: string, pagination?: { offset?: number; limit?: number }) =>
+      request<ApiSessionDetail>('sessions.detail', { agent, sessionId, ...pagination }),
 
     projects: (params: { agent?: ApiSessionAgent; projectPath?: string; scope: 'current-project' | 'all' }) =>
       request<ApiProjectSessionOverview[]>('sessions.projects', params),

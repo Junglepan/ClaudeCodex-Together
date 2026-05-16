@@ -1,4 +1,4 @@
-import { aggregateProjects, buildOverview, filterSummaries } from './sessionAnalytics'
+import { aggregateProjectsFromSummaries, buildOverviewFromSummaries, filterSummaries } from './sessionAnalytics'
 import { listClaudeSessions, readClaudeSession } from './claudeSessions'
 import { listCodexSessions, readCodexSession } from './codexSessions'
 import { searchSessionMessages } from './sessionSearch'
@@ -30,21 +30,26 @@ export async function getSessionDetail(request: SessionDetailRequest, options: S
   const sessions = await listSessions({ agent: request.agent, scope: 'all' }, options)
   const session = sessions.find((candidate) => candidate.id === request.sessionId)
   if (!session) throw new Error(`Session not found: ${request.sessionId}`)
-  return request.agent === 'claude' ? readClaudeSession(session.path) : readCodexSession(session.path)
+  const pagination = request.offset != null || request.limit != null
+    ? { offset: request.offset, limit: request.limit }
+    : undefined
+  return session.agent === 'claude'
+    ? readClaudeSession(session.path, pagination)
+    : readCodexSession(session.path, pagination)
 }
 
 export async function listSessionProjects(request: ListSessionsRequest, options: SessionRuntimeOptions = {}): Promise<ProjectSessionOverview[]> {
-  const details = await listSessionDetails(request, options)
-  return aggregateProjects(details)
+  const summaries = await listSessions(request, options)
+  return aggregateProjectsFromSummaries(summaries)
 }
 
 export async function getSessionsOverview(request: SessionsOverviewRequest, options: SessionRuntimeOptions = {}): Promise<SessionOverview> {
-  const details = await listSessionDetails({
+  const summaries = await listSessions({
     agent: request.agent,
     projectPath: request.projectPath,
     scope: request.scope === 'project' ? 'current-project' : 'all',
   }, options)
-  return buildOverview(details, request)
+  return buildOverviewFromSummaries(summaries, request)
 }
 
 export async function searchSessions(request: SearchSessionsRequest, options: SessionRuntimeOptions = {}): Promise<SessionSearchHit[]> {
@@ -53,11 +58,4 @@ export async function searchSessions(request: SearchSessionsRequest, options: Se
 
 export async function deleteSession(request: DeleteSessionRequest, options: SessionRuntimeOptions = {}): Promise<DeleteSessionResult> {
   return trashSession(request, options)
-}
-
-async function listSessionDetails(request: ListSessionsRequest, options: SessionRuntimeOptions) {
-  const sessions = await listSessions(request, options)
-  return Promise.all(sessions.map((session) =>
-    session.agent === 'claude' ? readClaudeSession(session.path) : readCodexSession(session.path),
-  ))
 }
