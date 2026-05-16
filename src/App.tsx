@@ -176,9 +176,10 @@ export function App() {
     }
   }, [setProjectPath, setTheme, theme])
 
-  // Electron: watch only config paths. Avoid recursively watching the user's home dir.
+  // Electron: watch only known config and session roots. Avoid recursively watching the user's home dir.
   useEffect(() => {
     if (!isElectron || !projectPath || !homePath) return
+    let cancelled = false
     const paths = [
       `${homePath}/.claude/CLAUDE.md`,
       `${homePath}/.claude/settings.json`,
@@ -194,8 +195,16 @@ export function App() {
       `${projectPath}/.claude`,
       `${projectPath}/.codex`,
     ]
-    electronApi.watchPath(Array.from(new Set(paths))).catch(() => {/* ignore */})
-    return () => { electronApi.unwatch().catch(() => {/* ignore */}) }
+    api.sessions.watchPaths()
+      .catch(() => [])
+      .then((sessionPaths) => {
+        if (cancelled) return
+        electronApi.watchPath(Array.from(new Set([...paths, ...sessionPaths]))).catch(() => {/* ignore */})
+      })
+    return () => {
+      cancelled = true
+      electronApi.unwatch().catch(() => {/* ignore */})
+    }
   }, [projectPath, homePath])
 
   // Heartbeat: ping /health every 5s, update backendHealthy

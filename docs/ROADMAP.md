@@ -5,6 +5,39 @@
 
 ---
 
+## 模块 S：会话管理
+
+- [x] **S-1 本地会话发现**
+  - Claude 与 Codex 独立扫描本地会话文件
+  - 按项目路径过滤，支持未知项目兜底
+
+- [x] **S-2 会话详情与消息构建**
+  - 统一 message DTO，展示 user / assistant / tool / system / unknown
+  - 支持长会话消息导航、角色过滤、工具消息显示切换
+
+- [x] **S-3 项目与用户级概览指标**
+  - 用户级总会话、总消息、工具调用、存储占用
+  - 项目级会话数、消息数、工具调用、Claude / Codex 分布
+
+- [x] **S-4 会话内容检索**
+  - 本地实时文本检索
+  - 支持 message 命中结果跳转到会话详情
+
+- [x] **S-5 安全删除**
+  - 删除移动到 `~/.cc-steward/trash/sessions/`
+  - 写入 manifest 记录原始路径、目标路径、agent、项目路径和删除时间
+
+- [x] **S-6 实时刷新接入**
+  - Electron watcher 合并 `~/.claude/projects` 和 `~/.codex/sessions`
+  - 只监听已知 session roots，不递归监听整个 home
+
+- [ ] **S-7 后续增强**
+  - 恢复 UI
+  - 搜索索引与日期过滤
+  - 会话摘要
+  - 启动/恢复会话
+  - git/提交轨迹关联
+
 ## 模块 A：Claude Agent 配置定义修正
 
 > 对应文件：`src/agents/claude.ts` + `backend/core/agents/claude.py`
